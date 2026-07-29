@@ -1,0 +1,154 @@
+.dashboard {
+  min-height: 100vh;
+  background-color: #191b29;
+  color: #f4f4f4;
+}
+
+.dash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 40px;
+  background-color: #12131f;
+  border-bottom: 1px solid #2a2d45;
+}
+
+.dash-header .logo span { color: #c084fc; }
+
+.dash-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.welcome { font-size: 14px; color: #aaa; }
+
+.logout-btn {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid #c084fc;
+  color: #c084fc;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.logout-btn:hover { background: #c084fc22; }
+
+.dash-body {
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.section h2 {
+  font-size: 20px;
+  margin-bottom: 16px;
+  color: #c084fc;
+}
+
+.add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.add-form input {
+  padding: 9px 12px;
+  border-radius: 6px;
+  border: 1px solid #2a2d45;
+  background: #12131f;
+  color: #f4f4f4;
+  font-size: 13px;
+  width: 180px;
+}
+
+.add-form input::placeholder { color: #555; }
+
+.add-btn {
+  padding: 9px 18px;
+  background: #7c3aed;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.add-btn:hover { background: #6d28d9; }
+
+.dash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.dash-table th {
+  text-align: left;
+  padding: 10px 14px;
+  background: #12131f;
+  color: #888;
+  font-weight: 500;
+  border-bottom: 1px solid #2a2d45;
+}
+
+.dash-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #1e2035;
+  color: #ddd;
+}
+
+.dash-table tr:hover td { background: #1a1c30; }
+
+.delete-btn {
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid #ef4444;
+  color: #ef4444;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.delete-btn:hover { background: #ef444422; }
+
+
+.promote-btn {
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid #f59e0b;
+  color: #f59e0b;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.promote-btn:hover { background: #f59e0b22; }
+
+.role-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+
+.role-superadmin { background: #3b1f6e; color: #c084fc; }
+.role-admin       { background: #1e3a5f; color: #60a5fa; }
+.role-user        { background: #1a3328; color: #34d399; }
+
+.profile-card p {
+  font-size: 15px;
+  padding: 10px 0;
+  border-bottom: 1px solid #2a2d45;
+  color: #ccc;
+}
+
+.profile-card p span:first-child { color: #888; margin-right: 8px; }
+
+.loading {
+  color: #888;
+  text-align: center;
+  padding: 40px;
+}

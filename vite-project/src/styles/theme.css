@@ -1,0 +1,130 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@500;600;700;800&display=swap");
+
+/* Shared design tokens, extracted from home.css so the logged-in app pages
+   stay visually consistent with the marketing homepage. Kept as :root
+   globals (rather than home.css's .uh-scoped copy) so any new page can use
+   them without needing a wrapper class. */
+:root {
+  --navy-950: #0a1120;
+  --navy-900: #0f1e3a;
+  --navy-800: #16294f;
+  --blue-600: #2563eb;
+  --blue-700: #1d4ed8;
+  --orange-500: #f97316;
+  --orange-600: #ea580c;
+  --green-500: #16a34a;
+  --red-500: #ef4444;
+  --slate-900: #0f172a;
+  --slate-600: #475569;
+  --slate-400: #94a3b8;
+  --slate-200: #e2e8f0;
+  --slate-100: #f1f5f9;
+  --bg: #ffffff;
+  --bg-alt: #f8fafc;
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.app * { box-sizing: border-box; }
+.app {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--slate-900);
+  background: var(--bg-alt);
+  min-height: 100vh;
+}
+.app h1, .app h2, .app h3, .app h4 {
+  font-family: "Poppins", "Inter", sans-serif;
+  color: var(--navy-900);
+  margin: 0;
+}
+.app p { color: var(--slate-600); line-height: 1.6; margin: 0; }
+.app a { color: inherit; text-decoration: none; }
+
+/* Buttons */
+.uh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: none;
+  font-family: "Inter", sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+  white-space: nowrap;
+}
+.uh-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.uh-btn:not(:disabled):hover { transform: translateY(-1px); }
+.uh-btn-primary { background: var(--blue-700); color: #fff; }
+.uh-btn-primary:not(:disabled):hover { background: var(--blue-600); }
+.uh-btn-orange { background: var(--orange-500); color: #fff; }
+.uh-btn-orange:not(:disabled):hover { background: var(--orange-600); }
+.uh-btn-danger { background: var(--red-500); color: #fff; }
+.uh-btn-ghost { background: var(--slate-100); color: var(--navy-900); }
+.uh-btn-ghost:not(:disabled):hover { background: var(--slate-200); }
+.uh-btn-outline { background: transparent; color: var(--navy-900); border: 1.5px solid var(--slate-200); }
+.uh-btn-sm { padding: 7px 14px; font-size: 13px; }
+
+/* Cards & sections */
+.uh-card {
+  background: var(--bg);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius);
+  padding: 22px;
+}
+.uh-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+.uh-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.uh-page-head h1 { font-size: 26px; }
+
+/* Forms */
+.uh-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.uh-field label { font-size: 13px; font-weight: 600; color: var(--slate-900); }
+.uh-field input,
+.uh-field select,
+.uh-field textarea {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--slate-200);
+  font-size: 14px;
+  font-family: inherit;
+}
+.uh-form-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.uh-form-row > .uh-field { flex: 1; min-width: 160px; }
+
+/* Badges (status pills) */
+.uh-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.uh-badge-blue { background: rgba(37, 99, 235, 0.1); color: var(--blue-700); }
+.uh-badge-green { background: rgba(22, 163, 74, 0.12); color: var(--green-500); }
+.uh-badge-orange { background: rgba(249, 115, 22, 0.12); color: var(--orange-600); }
+.uh-badge-red { background: rgba(239, 68, 68, 0.12); color: var(--red-500); }
+.uh-badge-slate { background: var(--slate-100); color: var(--slate-600); }
+
+/* Simple list/table */
+.uh-list { display: flex; flex-direction: column; gap: 12px; }
+.uh-empty {
+  text-align: center;
+  color: var(--slate-400);
+  padding: 40px 20px;
+  font-size: 14px;
+}

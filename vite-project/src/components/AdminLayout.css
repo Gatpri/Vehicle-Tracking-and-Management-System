@@ -1,0 +1,21 @@
+.admin-subnav {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 14px 40px;
+  background: #14152280;
+  border-bottom: 1px solid #2a2d45;
+}
+.admin-subnav-link {
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #aaa;
+}
+.admin-subnav-link:hover { background: #1a1c30; color: #f4f4f4; }
+.admin-subnav-link.active { background: #c084fc22; color: #c084fc; }
+
+@media (max-width: 700px) {
+  .admin-subnav { padding: 12px 16px; }
+}

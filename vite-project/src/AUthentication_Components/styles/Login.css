@@ -1,0 +1,51 @@
+
+.login{
+  background-color:#191b29;
+  filter: blur();
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+   min-height: 100vh;
+}
+
+
+
+.login .container{
+    background-color: #f4f4f4;
+    border-radius: 10px;
+    width: 80%;
+    display: flex;
+  overflow: hidden;
+    
+
+}
+
+
+h2{
+    align-self: center ;
+    color: blueviolet;
+}
+
+.toogle{
+    cursor: pointer;
+}
+
+.login_button{
+    align-self: center;
+}
+.forget_password{
+    text-decoration-line: underline;
+    cursor: pointer;
+    align-self: center;
+}
+
+.go_to_signin{
+align-self: center;
+
+}
+
+.go_to_signin > a{
+        text-decoration-line: underline;
+    cursor: pointer;
+}

@@ -1,0 +1,45 @@
+.ev-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(600px 400px at 50% 0%, rgba(37, 99, 235, 0.08), transparent),
+    var(--bg-alt);
+}
+
+.ev-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--bg);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 48px 40px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ev-logo {
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
+.ev-icon {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+.ev-icon svg { width: 38px; height: 38px; }
+.ev-icon-success { background: rgba(22, 163, 74, 0.12); color: var(--green-500); }
+.ev-icon-error { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+
+.ev-title { font-size: 26px; margin-bottom: 12px; }
+.ev-text { font-size: 15px; margin-bottom: 32px; max-width: 360px; }

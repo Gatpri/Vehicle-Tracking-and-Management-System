@@ -1,0 +1,6 @@
+# Ignore local env and service account key
+.env
+serviceAccountKey.json
+
+# Tesseract OCR downloads its language model to disk on first use
+eng.traineddata
