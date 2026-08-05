@@ -12,6 +12,8 @@ interface Vehicle {
   color?: string;
   vehicleType: string;
   status: "active" | "stolen" | "inactive";
+  images: string[];
+  plateImageUrl: string;
 }
 
 function VehicleDetailPage() {
@@ -21,6 +23,7 @@ function VehicleDetailPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState<"vehicle" | "plate" | null>(null);
 
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
@@ -63,6 +66,31 @@ function VehicleDetailPage() {
     }
   };
 
+  const uploadPhoto = async (file: File, kind: "vehicle" | "plate") => {
+    setUploading(kind);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      formData.append("kind", kind);
+      const res = await api.post(`/vehicles/${id}/photos`, formData);
+      setVehicle(res.data.vehicle);
+      toast.success(kind === "plate" ? "Number plate photo saved" : "Vehicle photo added");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to upload photo"));
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const removePhoto = async (url: string, kind: "vehicle" | "plate") => {
+    try {
+      const res = await api.delete(`/vehicles/${id}/photos`, { data: { url, kind } });
+      setVehicle(res.data.vehicle);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to remove photo"));
+    }
+  };
+
   const handleDelete = async () => {
     if (!confirm("Delete this vehicle? This cannot be undone.")) return;
     try {
@@ -87,6 +115,7 @@ function VehicleDetailPage() {
           <p>{vehicle.make} {vehicle.model} {vehicle.year ? `(${vehicle.year})` : ""} · {vehicle.color} · {vehicle.vehicleType}</p>
         </div>
         <div className="ap-detail-actions">
+          <Link to={`/vehicles/${vehicle._id}/history`} className="uh-btn uh-btn-ghost">Service History</Link>
           <Link to={`/tracking/${vehicle._id}`} className="uh-btn uh-btn-primary">Track Vehicle</Link>
           <Link to={`/workshops?vehicleId=${vehicle._id}`} className="uh-btn uh-btn-orange">Book Service</Link>
         </div>
@@ -122,6 +151,77 @@ function VehicleDetailPage() {
             <button className="uh-btn uh-btn-danger" onClick={handleDelete}>Delete Vehicle</button>
           </div>
         )}
+      </div>
+
+      {/* Theft evidence. Uploaded ahead of time on purpose: the moment a camera
+          spots this plate, the owner is shown their own photo next to the
+          camera frame, and an SOS carries both to admins. Adding them after
+          the vehicle is gone is too late to be useful. */}
+      <div className="ap-section-title" style={{ marginTop: 28 }}>Photos</div>
+      <p className="ap-photo-hint">
+        Used as evidence if a camera detects this plate — you'll see your own photo beside the camera frame,
+        and admins receive both with any SOS you raise.
+      </p>
+
+      <div className="ap-photo-cols">
+        <section>
+          <h4 className="ap-photo-head">Number plate close-up</h4>
+          {vehicle.plateImageUrl ? (
+            <figure className="ap-photo">
+              <img src={vehicle.plateImageUrl} alt="Number plate" />
+              <button className="ap-photo-remove" onClick={() => removePhoto(vehicle.plateImageUrl, "plate")}>
+                Remove
+              </button>
+            </figure>
+          ) : (
+            <div className="ap-photo-empty">No plate photo yet</div>
+          )}
+          <label className="uh-btn uh-btn-ghost ap-photo-upload">
+            {uploading === "plate" ? "Uploading..." : vehicle.plateImageUrl ? "Replace plate photo" : "Upload plate photo"}
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              disabled={uploading !== null}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) uploadPhoto(file, "plate");
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </section>
+
+        <section>
+          <h4 className="ap-photo-head">Vehicle photos</h4>
+          {vehicle.images.length === 0 ? (
+            <div className="ap-photo-empty">No vehicle photos yet</div>
+          ) : (
+            <div className="ap-photo-grid">
+              {vehicle.images.map((url, i) => (
+                <figure className="ap-photo" key={url}>
+                  <img src={url} alt={`Vehicle ${i + 1}`} />
+                  {i === 0 && <span className="ap-photo-primary">Primary</span>}
+                  <button className="ap-photo-remove" onClick={() => removePhoto(url, "vehicle")}>Remove</button>
+                </figure>
+              ))}
+            </div>
+          )}
+          <label className="uh-btn uh-btn-ghost ap-photo-upload">
+            {uploading === "vehicle" ? "Uploading..." : "Add vehicle photo"}
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              disabled={uploading !== null}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) uploadPhoto(file, "vehicle");
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </section>
       </div>
     </div>
   );

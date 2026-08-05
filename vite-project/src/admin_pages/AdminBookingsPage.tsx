@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { getSocket } from "../lib/socket";
+import PartsQuotePanel from "../components/PartsQuotePanel";
 import "./AdminPages.css";
 
 interface Booking {
@@ -11,15 +12,19 @@ interface Booking {
   workshop: { name: string };
   serviceType: string;
   status: "pending" | "accepted" | "in_progress" | "completed" | "cancelled";
-  quotedPrice: number | null;
+  finalPrice: number | null;
   isOverpriced: boolean;
+  paymentStatus: "unpaid" | "paid" | "refunded";
 }
 
 function AdminBookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [quotes, setQuotes] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Opened from the row, or deep-linked from a notification (?quote=<id>).
+  const [openQuoteId, setOpenQuoteId] = useState<string | null>(
+    new URLSearchParams(window.location.search).get("quote")
+  );
 
   const load = async () => {
     try {
@@ -39,8 +44,9 @@ function AdminBookingsPage() {
     initial();
 
     const socket = getSocket();
-    const onOverpriced = (b: Booking) => {
-      toast.warn(`Overpriced quote flagged for ${b.serviceType}`);
+    const onOverpriced = ({ agreedTotal }: { bookingId: string; agreedTotal: number }) => {
+      toast.warn(`Overpriced quote flagged — agreed total Rs ${(agreedTotal / 100).toFixed(2)}`);
+      load();
     };
     socket.on("booking:overpriced", onOverpriced);
     return () => {
@@ -49,14 +55,9 @@ function AdminBookingsPage() {
   }, []);
 
   const accept = async (id: string) => {
-    const quotedPrice = Number(quotes[id]);
-    if (!quotedPrice || quotedPrice <= 0) {
-      toast.error("Enter a quote amount (in paisa) first");
-      return;
-    }
     setBusyId(id);
     try {
-      await api.patch(`/bookings/${id}/accept`, { quotedPrice });
+      await api.patch(`/bookings/${id}/accept`);
       toast.success("Booking accepted");
       load();
     } catch (err) {
@@ -107,7 +108,7 @@ function AdminBookingsPage() {
             </tr>
           </thead>
           <tbody>
-            {bookings.map((b) => (
+            {bookings.map((b) => [
               <tr key={b._id}>
                 <td>{b.user?.firstname} {b.user?.lastname}</td>
                 <td>{b.vehicle?.plateNumber}</td>
@@ -115,20 +116,12 @@ function AdminBookingsPage() {
                 <td>{b.serviceType}</td>
                 <td><span className={`role-badge status-${b.status}`}>{b.status}</span></td>
                 <td>
-                  {b.quotedPrice != null ? `Rs ${(b.quotedPrice / 100).toFixed(2)}` : "—"}
+                  {b.finalPrice != null ? `Rs ${(b.finalPrice / 100).toFixed(2)}` : "—"}
                   {b.isOverpriced && <div className="adm-overprice-warning">⚠ overpriced</div>}
                 </td>
                 <td>
                   {b.status === "pending" && (
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <input
-                        placeholder="paisa"
-                        style={{ width: 90 }}
-                        value={quotes[b._id] || ""}
-                        onChange={(e) => setQuotes((q) => ({ ...q, [b._id]: e.target.value }))}
-                      />
-                      <button className="add-btn" disabled={busyId === b._id} onClick={() => accept(b._id)}>Accept</button>
-                    </div>
+                    <button className="add-btn" disabled={busyId === b._id} onClick={() => accept(b._id)}>Accept</button>
                   )}
                   {b.status === "accepted" && (
                     <button className="add-btn" disabled={busyId === b._id} onClick={() => start(b._id)}>Start</button>
@@ -136,9 +129,29 @@ function AdminBookingsPage() {
                   {b.status === "in_progress" && (
                     <button className="add-btn" disabled={busyId === b._id} onClick={() => complete(b._id)}>Complete</button>
                   )}
+                  {/* Parts are found once the bike is open, so the estimate is
+                      reachable from any live job — but not once it's paid,
+                      when changing the total would contradict money already
+                      collected. Past estimates stay viewable via the panel. */}
+                  {b.status !== "cancelled" && b.paymentStatus !== "paid" && (
+                    <button
+                      className="adm-camera-toggle"
+                      style={{ marginTop: 6 }}
+                      onClick={() => setOpenQuoteId(openQuoteId === b._id ? null : b._id)}
+                    >
+                      {openQuoteId === b._id ? "Hide estimate" : "Parts estimate"}
+                    </button>
+                  )}
                 </td>
-              </tr>
-            ))}
+              </tr>,
+              openQuoteId === b._id && (
+                <tr key={`${b._id}-quote`}>
+                  <td colSpan={7} style={{ background: "#0e0f19", padding: 14 }}>
+                    <PartsQuotePanel bookingId={b._id} side="workshop" />
+                  </td>
+                </tr>
+              ),
+            ])}
           </tbody>
         </table>
       )}

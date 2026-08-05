@@ -5,6 +5,7 @@ import axios from 'axios';
 import { toast } from 'react-toastify';
 import { auth, googleProvider } from "../../firebase";
 import { signInWithPopup } from "firebase/auth";  // popup, no useEffect needed
+import { landingPathFor } from "../../lib/roles";
 
 const VERIFY_POLL_MS = 3000;
 
@@ -86,16 +87,12 @@ function Signin(){
       const idToken = await result.user.getIdToken();
       const response = await axios.post("http://localhost:3000/google-auth", { idToken });
       if (response.data.success) {
-        const role = response.data.user.role;
         localStorage.setItem("user", JSON.stringify(response.data.user));
         localStorage.setItem("token", response.data.token);
         toast.success("Login Successful!");
-
-        if (role === "admin" || role === "superadmin") {
-          navigate("/dashboard");
-        } else {
-          navigate("/home");
-        }
+        // Same role-aware landing as the password login — a
+        // vehicle-tracking-admin has no dashboard to land on.
+        navigate(landingPathFor(response.data.user.role));
       } else {
         toast.error("Google login failed");
       }

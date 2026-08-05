@@ -1,14 +1,21 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
+import { VEHICLE_BRANDS, BIKE_TYPES } from "../lib/workshopOptions";
+import { isWorkshopAdmin } from "../lib/roles";
+import { getCurrentUser } from "../lib/useAuth";
+import MyWorkshopPanel from "./MyWorkshopPanel";
+import WorkshopReviewsPanel from "./WorkshopReviewsPanel";
 import "./AdminPages.css";
 
 interface Workshop {
   _id: string;
   name: string;
   address: string;
+  area?: string;
   status: string;
   servicesOffered: { serviceType: string; basePrice: number }[];
+  managedBy: string | null;
 }
 
 function parseServices(raw: string) {
@@ -31,9 +38,44 @@ function AdminWorkshopsPage() {
 
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [area, setArea] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [servicesRaw, setServicesRaw] = useState("");
+  const [brands, setBrands] = useState<string[]>([]);
+  const [types, setTypes] = useState<string[]>([]);
+  const currentUser = getCurrentUser();
+  // Email of the account being assigned as manager, keyed by workshop id.
+  const [managerEmail, setManagerEmail] = useState<Record<string, string>>({});
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  // Which workshop's reviews are expanded (admin view), and the workshop-admin's
+  // own garage id once MyWorkshopPanel has resolved it.
+  const [openReviewsId, setOpenReviewsId] = useState<string | null>(null);
+  const [myWorkshopId, setMyWorkshopId] = useState<string | null>(null);
+
+  // Assigning by email rather than picking from a user list: email is the
+  // unique handle an admin actually has when a garage owner asks for access.
+  const assignManager = async (workshopId: string) => {
+    const email = (managerEmail[workshopId] ?? "").trim();
+    if (!email) {
+      toast.error("Enter the manager's account email");
+      return;
+    }
+    setAssigningId(workshopId);
+    try {
+      const res = await api.patch(`/workshops/${workshopId}/manager`, { email });
+      toast.success(`${res.data.manager.firstname} now manages this workshop (${res.data.manager.role})`);
+      setManagerEmail((m) => ({ ...m, [workshopId]: "" }));
+      load();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to assign manager"));
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  const toggle = (value: string, list: string[], setList: (v: string[]) => void) =>
+    setList(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
 
   const load = async () => {
     try {
@@ -60,11 +102,15 @@ function AdminWorkshopsPage() {
       await api.post("/workshops", {
         name,
         address,
+        area,
         location: { lat: Number(lat), lng: Number(lng) },
         servicesOffered: parseServices(servicesRaw),
+        brandsSupported: brands,
+        bikeTypes: types,
       });
       toast.success("Workshop created");
-      setName(""); setAddress(""); setLat(""); setLng(""); setServicesRaw("");
+      setName(""); setAddress(""); setArea(""); setLat(""); setLng(""); setServicesRaw("");
+      setBrands([]); setTypes([]);
       setShowForm(false);
       load();
     } catch (err) {
@@ -85,6 +131,25 @@ function AdminWorkshopsPage() {
     }
   };
 
+  // A workshop-admin has exactly one garage and no business seeing the
+  // registry, so this page becomes their workshop editor instead.
+  if (isWorkshopAdmin(currentUser?.role)) {
+    return (
+      <div className="adm-page">
+        <div className="adm-page-head"><h2>My Workshop</h2></div>
+        <MyWorkshopPanel onLoaded={setMyWorkshopId} />
+        {myWorkshopId && (
+          <>
+            <div className="ap-section-title" style={{ marginTop: 28, marginBottom: 10 }}>
+              Ratings &amp; Reviews
+            </div>
+            <WorkshopReviewsPanel workshopId={myWorkshopId} />
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="adm-page">
       <div className="adm-page-head">
@@ -98,6 +163,11 @@ function AdminWorkshopsPage() {
         <form className="add-form" onSubmit={handleSubmit} style={{ flexDirection: "column", alignItems: "stretch", maxWidth: 500 }}>
           <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required />
           <input placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
+          <input
+            placeholder="Area (e.g. Kathmandu) — used to match delivery-staff"
+            value={area}
+            onChange={(e) => setArea(e.target.value)}
+          />
           <div style={{ display: "flex", gap: 10 }}>
             <input placeholder="Latitude" value={lat} onChange={(e) => setLat(e.target.value)} required />
             <input placeholder="Longitude" value={lng} onChange={(e) => setLng(e.target.value)} required />
@@ -108,6 +178,41 @@ function AdminWorkshopsPage() {
             onChange={(e) => setServicesRaw(e.target.value)}
             style={{ width: "100%" }}
           />
+          {/* Drives the customer-facing brand and type filters. Leaving these
+              empty marks the workshop "unspecified", which keeps it out of
+              filtered searches rather than falsely claiming every brand. */}
+          <div className="adm-ws-picker">
+            <span className="adm-ws-picker-label">Brand experience</span>
+            <div className="adm-ws-chips">
+              {VEHICLE_BRANDS.map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  className={`adm-ws-chip ${brands.includes(b) ? "active" : ""}`}
+                  onClick={() => toggle(b, brands, setBrands)}
+                >
+                  {b}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="adm-ws-picker">
+            <span className="adm-ws-picker-label">Motorcycle types serviced</span>
+            <div className="adm-ws-chips">
+              {BIKE_TYPES.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`adm-ws-chip ${types.includes(t) ? "active" : ""}`}
+                  onClick={() => toggle(t, types, setTypes)}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <button className="add-btn" type="submit" disabled={submitting}>
             {submitting ? "Creating..." : "Create Workshop"}
           </button>
@@ -120,17 +225,53 @@ function AdminWorkshopsPage() {
         <p className="adm-empty">No workshops.</p>
       ) : (
         <table className="dash-table">
-          <thead><tr><th>Name</th><th>Address</th><th>Services</th><th>Status</th><th>Action</th></tr></thead>
+          <thead><tr><th>Name</th><th>Address</th><th>Area</th><th>Services</th><th>Manager</th><th>Status</th><th>Action</th></tr></thead>
           <tbody>
-            {workshops.map((w) => (
+            {workshops.map((w) => [
               <tr key={w._id}>
                 <td>{w.name}</td>
                 <td>{w.address}</td>
+                <td>{w.area || "—"}</td>
                 <td>{w.servicesOffered.map((s) => s.serviceType).join(", ")}</td>
+                <td>
+                  {/* Assigning a manager both links the garage and promotes a
+                      plain user to workshop-admin, so it's one action. */}
+                  <div className="adm-ws-assign">
+                    <input
+                      placeholder="manager@email.com"
+                      value={managerEmail[w._id] ?? ""}
+                      onChange={(e) => setManagerEmail((m) => ({ ...m, [w._id]: e.target.value }))}
+                    />
+                    <button
+                      className="adm-camera-toggle"
+                      disabled={assigningId === w._id}
+                      onClick={() => assignManager(w._id)}
+                    >
+                      {assigningId === w._id ? "..." : w.managedBy ? "Reassign" : "Assign"}
+                    </button>
+                  </div>
+                </td>
                 <td>{w.status}</td>
-                <td><button className="delete-btn" onClick={() => handleDelete(w._id)}>Delete</button></td>
-              </tr>
-            ))}
+                <td>
+                  <button
+                    className="adm-camera-toggle"
+                    style={{ marginRight: 6 }}
+                    onClick={() => setOpenReviewsId(openReviewsId === w._id ? null : w._id)}
+                  >
+                    {openReviewsId === w._id ? "Hide reviews" : "Ratings & reviews"}
+                  </button>
+                  <button className="delete-btn" onClick={() => handleDelete(w._id)}>Delete</button>
+                </td>
+              </tr>,
+              openReviewsId === w._id && (
+                <tr key={`${w._id}-reviews`}>
+                  <td colSpan={7} style={{ background: "#0e0f19", padding: 14 }}>
+                    <div className="adm-sub" style={{ marginBottom: 10 }}>{w.name}</div>
+                    <WorkshopReviewsPanel workshopId={w._id} />
+                  </td>
+                </tr>
+              ),
+            ])}
           </tbody>
         </table>
       )}

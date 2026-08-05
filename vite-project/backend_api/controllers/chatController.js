@@ -1,18 +1,71 @@
 import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
-import { hasPermission } from "../policies/permissions.js";
+import Workshop from "../models/Workshop.js";
+import ServiceRequest from "../models/ServiceRequest.js";
+import { hasPermission, ADMIN_ROLES, isAdminRole } from "../policies/permissions.js";
 import { getIO } from "../config/socket.js";
 
 const canReadAny = (user) => hasPermission(user.role, "chat:read:any", user.permissions);
 
+// True when `candidateId` has an actual booking at a workshop this user
+// manages. Deliberately checks bookings rather than role: it's the existing
+// business relationship that earns the right to make contact, not the job title.
+const isMyWorkshopCustomer = async (user, candidateId) => {
+  if (user.role !== "workshop-admin" && user.role !== "admin") return false;
+  const managed = await Workshop.find({ managedBy: user._id }).select("_id");
+  if (managed.length === 0) return false;
+  const booking = await ServiceRequest.findOne({
+    user: candidateId,
+    workshop: { $in: managed.map((w) => w._id) },
+  }).select("_id");
+  return Boolean(booking);
+};
+
 // Any authenticated user can see who support is — needed so a regular user
 // has someone to start a conversation with (they have no permission to hit
-// the admin-only /admins listing).
+// the admin-only /admins listing). Staff use the same list to reach each
+// other, so the caller is excluded: nobody needs to message themselves.
 export const listSupportAdmins = async (req, res) => {
   try {
-    const admins = await User.find({ role: { $in: ["admin", "superadmin"] } }).select("firstname lastname role");
+    // delivery-admin isn't in ADMIN_ROLES (it doesn't join the general
+    // "admins" broadcast room) but should still be contactable in support
+    // chat, so it's added here explicitly rather than widening ADMIN_ROLES.
+    const admins = await User.find({
+      role: { $in: [...ADMIN_ROLES, "delivery-admin"] },
+      _id: { $ne: req.user._id },
+    }).select("firstname lastname role");
     res.json({ success: true, admins });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// Customers a workshop-admin may open a thread with: everyone who has booked
+// at a garage they manage. Powers the "Message a customer" picker.
+export const listMyWorkshopCustomers = async (req, res) => {
+  try {
+    const managed = await Workshop.find({ managedBy: req.user._id }).select("_id");
+    if (managed.length === 0) return res.json({ success: true, customers: [] });
+
+    const bookings = await ServiceRequest.find({ workshop: { $in: managed.map((w) => w._id) } })
+      .populate("user", "firstname lastname email")
+      .select("user serviceType createdAt")
+      .sort({ createdAt: -1 });
+
+    // One entry per person, keeping their most recent job for context.
+    const seen = new Map();
+    for (const booking of bookings) {
+      if (!booking.user || seen.has(String(booking.user._id))) continue;
+      seen.set(String(booking.user._id), {
+        _id: booking.user._id,
+        firstname: booking.user.firstname,
+        lastname: booking.user.lastname,
+        lastService: booking.serviceType,
+      });
+    }
+
+    res.json({ success: true, customers: [...seen.values()] });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -25,9 +78,24 @@ export const getOrCreateConversation = async (req, res) => {
       return res.status(400).json({ success: false, message: "recipientId is required" });
     }
 
+    if (String(recipientId) === String(req.user._id)) {
+      return res.status(400).json({ success: false, message: "You can't start a conversation with yourself" });
+    }
+
+    // Conversations open toward staff, which is what keeps a regular user
+    // un-contactable until they reach out first.
+    //
+    // The one exception: a workshop-admin may open a thread with someone who
+    // booked at their garage. That's a customer they're already holding a
+    // vehicle for, so the "no cold-messaging strangers" rule isn't what's
+    // protecting anyone there — and without it a garage can't ask about the
+    // job in front of them.
     const recipient = await User.findById(recipientId);
-    if (!recipient || (recipient.role !== "admin" && recipient.role !== "superadmin")) {
-      return res.status(400).json({ success: false, message: "recipientId must be an admin" });
+    if (!recipient) {
+      return res.status(404).json({ success: false, message: "Recipient not found" });
+    }
+    if (!isAdminRole(recipient.role) && !(await isMyWorkshopCustomer(req.user, recipientId))) {
+      return res.status(400).json({ success: false, message: "You can only start a conversation with staff" });
     }
 
     let conversation = await Conversation.findOne({

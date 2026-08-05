@@ -11,6 +11,62 @@ const router = express.Router();
  * =========================
  */
 
+// Look a user up by their exact email. Email is the unique handle an admin
+// actually knows when someone asks to be made a workshop manager — searching
+// a paginated user table for them doesn't scale past a few dozen accounts.
+router.get(
+  "/users/by-email",
+  verifyToken,
+  requirePermission("user:promote"),
+  async (req, res) => {
+    try {
+      const email = String(req.query.email ?? "").trim().toLowerCase();
+      if (!email) {
+        return res.status(400).json({ success: false, message: "email is required" });
+      }
+      const user = await User.findOne({ email }).select("firstname lastname email role");
+      if (!user) {
+        return res.status(404).json({ success: false, message: "No account with that email" });
+      }
+      res.json({ success: true, user });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+// One role per call — the rebuilt dashboard fires one of these per role table
+// (in parallel) rather than fetching everyone and filtering client-side.
+// Includes superadmin, unlike the legacy /admins endpoint below, since the
+// dashboard now needs its own superadmin table too.
+router.get(
+  "/users/by-role",
+  verifyToken,
+  requirePermission("admin:read"),
+  async (req, res) => {
+    try {
+      const VALID_ROLES = [
+        "superadmin",
+        "admin",
+        "vehicle-tracking-admin",
+        "workshop-admin",
+        "accounting-admin",
+        "delivery-admin",
+        "delivery-staff",
+        "user",
+      ];
+      const role = String(req.query.role ?? "");
+      if (!VALID_ROLES.includes(role)) {
+        return res.status(400).json({ success: false, message: "Invalid role" });
+      }
+      const users = await User.find({ role }).select("-password");
+      res.json({ success: true, users });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
 // Get all normal users
 router.get(
   "/users",
@@ -128,7 +184,11 @@ router.get(
   requirePermission("admin:read"),
   async (req, res) => {
     try {
-      const admins = await User.find({ role: "admin" }).select("-password");
+      // Includes the narrowed roles so they're visible and manageable in the
+      // dashboard's Admins table rather than invisible.
+      const admins = await User.find({
+        role: { $in: ["admin", "vehicle-tracking-admin", "workshop-admin", "delivery-admin", "delivery-staff"] },
+      }).select("-password");
       res.json({ success: true, admins });
     } catch (err) {
       res.status(500).json({ success: false, error: err.message });
@@ -217,7 +277,7 @@ router.patch(
   requirePermission("user:promote"),
   async (req, res) => {
     try {
-      const { role } = req.body;
+      const { role, area, region } = req.body;
       const currentUser = req.user;
 
       const targetUser = await User.findById(req.params.id);
@@ -239,7 +299,7 @@ router.patch(
       }
 
       // Invalid role
-      if (!["admin", "superadmin"].includes(role)) {
+      if (!["admin", "superadmin", "vehicle-tracking-admin", "workshop-admin", "delivery-admin", "delivery-staff"].includes(role)) {
         return res.status(400).json({
           success: false,
           message: "Invalid role",
@@ -274,6 +334,17 @@ router.patch(
       }
 
       targetUser.role = role;
+      // Keeps promotion and area/region assignment a single dashboard action
+      // rather than a separate edit step. delivery-staff gets both (area is
+      // their specific locality, region their broader assignment-matching
+      // group); delivery-admin only ever needs a region — they manage a
+      // whole region's worth of staff, not one locality.
+      if (role === "delivery-staff") {
+        if (typeof area === "string") targetUser.area = area;
+        if (typeof region === "string") targetUser.region = region;
+      } else if (role === "delivery-admin") {
+        if (typeof region === "string") targetUser.region = region;
+      }
       await targetUser.save();
 
       const userObj = targetUser.toObject();

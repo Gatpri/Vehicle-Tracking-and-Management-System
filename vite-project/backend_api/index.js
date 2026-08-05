@@ -12,15 +12,21 @@ import vehicleRoutes from "./routes/vehicles.js";
 import workshopRoutes from "./routes/workshops.js";
 import bookingRoutes from "./routes/bookings.js";
 import trackingRoutes from "./routes/tracking.js";
+import deliveryRoutes from "./routes/deliveries.js";
+import deliveryStaffRoutes from "./routes/deliveryStaff.js";
 import cctvRoutes from "./routes/cctv.js";
+import cameraRoutes from "./routes/cameras.js";
 import chatRoutes from "./routes/chat.js";
 import walletRoutes from "./routes/wallet.js";
 import sosRoutes from "./routes/sos.js";
 import theftRoutes from "./routes/theft.js";
+import notificationRoutes from "./routes/notifications.js";
+import quoteRoutes from "./routes/quotes.js";
 import mongoose from "mongoose";
 import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { initSocket } from "./config/socket.js";
 import { registerHandlers } from "./sockets/index.js";
+import { startCameraPoller } from "./services/cameraPollerService.js";
 
 let firebaseAdminInitialized = false;
 try {
@@ -83,11 +89,16 @@ app.use("/", vehicleRoutes);
 app.use("/", workshopRoutes);
 app.use("/", bookingRoutes);
 app.use("/", trackingRoutes);
+app.use("/", deliveryRoutes);
+app.use("/", deliveryStaffRoutes);
 app.use("/", cctvRoutes);
+app.use("/", cameraRoutes);
 app.use("/", chatRoutes);
 app.use("/", walletRoutes);
 app.use("/", sosRoutes);
 app.use("/", theftRoutes);
+app.use("/", notificationRoutes);
+app.use("/", quoteRoutes);
 
 const httpServer = http.createServer(app);
 const io = initSocket(httpServer, corsOptions);
@@ -96,6 +107,8 @@ registerHandlers(io);
 httpServer.listen(3000, () => {
   console.log("Server running at http://localhost:3000");
 });
+
+startCameraPoller();
 
 
 

@@ -8,7 +8,8 @@
     "build": "tsc -b; vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start": "nodemon backend_api/index.js"
+    "start": "nodemon backend_api/index.js",
+    "anpr": "python anpr_service/server.py"
   },
   "dependencies": {
     "axios": "^1.16.1",
@@ -31,9 +32,9 @@
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^7.15.0",
     "react-toastify": "^11.1.0",
+    "sharp": "^0.35.3",
     "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3",
-    "tesseract.js": "^7.0.0"
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

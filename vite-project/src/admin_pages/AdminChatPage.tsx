@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "react-toastify";
-import api from "../lib/api";
+import api, { getErrorMessage } from "../lib/api";
 import { getSocket } from "../lib/socket";
 import { getCurrentUser } from "../lib/useAuth";
 import "./AdminPages.css";
@@ -23,6 +23,19 @@ interface Message {
   text: string;
   createdAt: string;
 }
+interface StaffMember {
+  _id: string;
+  firstname: string;
+  lastname: string;
+  role: string;
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  superadmin: "Superadmin",
+  admin: "Admin",
+  "vehicle-tracking-admin": "Vehicle Tracking Admin",
+  "workshop-admin": "Workshop Admin",
+};
 
 function AdminChatPage() {
   const me = getCurrentUser();
@@ -34,6 +47,12 @@ function AdminChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [customers, setCustomers] = useState<{ _id: string; firstname: string; lastname: string; lastService: string }[]>([]);
+  const [newCustomerId, setNewCustomerId] = useState("");
+  const [newRole, setNewRole] = useState("");
+  const [newPersonId, setNewPersonId] = useState("");
+  const [starting, setStarting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const loadConversations = async () => {
@@ -50,6 +69,23 @@ function AdminChatPage() {
   useEffect(() => {
     const initial = async () => {
       await loadConversations();
+      try {
+        // Colleagues this account can open a thread with. The endpoint only
+        // ever returns staff, so there is no way to start one with a
+        // regular user from here — by design.
+        const res = await api.get("/chat/support-admins");
+        setStaff(res.data.admins);
+      } catch {
+        toast.error("Failed to load staff directory");
+      }
+      try {
+        // Only workshop-admins get results here: people who booked at a garage
+        // they manage. Everyone else gets an empty list and no picker.
+        const res = await api.get("/chat/my-customers");
+        setCustomers(res.data.customers ?? []);
+      } catch {
+        setCustomers([]);
+      }
     };
     initial();
   }, []);
@@ -101,9 +137,39 @@ function AdminChatPage() {
     setText("");
   };
 
+  const otherParty = (c: Conversation) =>
+    c.participants.find((p) => p._id !== myId) || c.participants[0];
+
   const conversationLabel = (c: Conversation) => {
-    const other = c.participants.find((p) => p._id !== myId) || c.participants[0];
+    const other = otherParty(c);
     return other ? `${other.firstname} ${other.lastname}` : "Conversation";
+  };
+
+  // Staff threads are ones this account can start; user threads only ever
+  // exist because the owner wrote in first, which is why they get the
+  // "they'll show up once they message you" empty state and staff don't.
+  const isStaff = (role?: string) => Boolean(role) && role !== "user";
+  const staffThreads = conversations.filter((c) => isStaff(otherParty(c)?.role));
+  const userThreads = conversations.filter((c) => !isStaff(otherParty(c)?.role));
+
+  const rolesAvailable = [...new Set(staff.map((s) => s.role))];
+  const peopleInRole = staff.filter((s) => s.role === newRole);
+
+  const startConversation = async (recipientId: string) => {
+    if (!recipientId) return;
+    setStarting(true);
+    try {
+      const res = await api.post("/chat/conversations", { recipientId });
+      await loadConversations();
+      openConversation(res.data.conversation._id);
+      setNewRole("");
+      setNewPersonId("");
+      setNewCustomerId("");
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't start that conversation"));
+    } finally {
+      setStarting(false);
+    }
   };
 
   return (
@@ -115,8 +181,73 @@ function AdminChatPage() {
       ) : (
         <div className="adm-chat-layout">
           <div className="adm-chat-list">
-            {conversations.length === 0 && <p className="adm-empty">No conversations yet — users will show up here once they message you.</p>}
-            {conversations.map((c) => (
+            <div className="adm-chat-new">
+              <span className="adm-chat-group-head">Message a colleague</span>
+              <select
+                value={newRole}
+                onChange={(e) => { setNewRole(e.target.value); setNewPersonId(""); }}
+              >
+                <option value="">Select a role...</option>
+                {rolesAvailable.map((r) => (
+                  <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>
+                ))}
+              </select>
+              {newRole && (
+                <select value={newPersonId} onChange={(e) => setNewPersonId(e.target.value)}>
+                  <option value="">Select a person...</option>
+                  {peopleInRole.map((p) => (
+                    <option key={p._id} value={p._id}>{p.firstname} {p.lastname}</option>
+                  ))}
+                </select>
+              )}
+              {newPersonId && (
+                <button className="add-btn" onClick={() => startConversation(newPersonId)} disabled={starting}>
+                  {starting ? "Starting..." : "Start chat"}
+                </button>
+              )}
+            </div>
+
+            {/* Workshop-admins only. Customers who booked at their garage are
+                the one group of non-staff they may contact first. */}
+            {customers.length > 0 && (
+              <div className="adm-chat-new">
+                <span className="adm-chat-group-head">Message a customer</span>
+                <select value={newCustomerId} onChange={(e) => setNewCustomerId(e.target.value)}>
+                  <option value="">Select a customer...</option>
+                  {customers.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.firstname} {c.lastname} — {c.lastService}
+                    </option>
+                  ))}
+                </select>
+                {newCustomerId && (
+                  <button className="add-btn" onClick={() => startConversation(newCustomerId)} disabled={starting}>
+                    {starting ? "Starting..." : "Start chat"}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <span className="adm-chat-group-head">Team</span>
+            {staffThreads.length === 0 && <p className="adm-empty adm-chat-empty">No staff conversations yet.</p>}
+            {staffThreads.map((c) => (
+              <div
+                key={c._id}
+                className={`adm-chat-list-item ${activeId === c._id ? "active" : ""}`}
+                onClick={() => openConversation(c._id)}
+              >
+                {conversationLabel(c)}
+                <em className="adm-chat-role">{ROLE_LABELS[otherParty(c)?.role ?? ""] ?? otherParty(c)?.role}</em>
+              </div>
+            ))}
+
+            <span className="adm-chat-group-head">Users</span>
+            {userThreads.length === 0 && (
+              <p className="adm-empty adm-chat-empty">
+                No conversations yet — users will show up here once they message you.
+              </p>
+            )}
+            {userThreads.map((c) => (
               <div
                 key={c._id}
                 className={`adm-chat-list-item ${activeId === c._id ? "active" : ""}`}

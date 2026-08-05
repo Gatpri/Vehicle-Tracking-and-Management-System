@@ -1,0 +1,132 @@
+/* Full-screen interrupt for "a camera just saw your stolen vehicle". Loud on
+   purpose — it has to win attention against whatever page is underneath. */
+.ta-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(5, 6, 12, 0.82);
+  backdrop-filter: blur(4px);
+  animation: ta-fade-in 180ms ease-out;
+}
+
+.ta-modal {
+  width: min(560px, 100%);
+  max-height: 92vh;
+  overflow-y: auto;
+  border-radius: 14px;
+  background: #12131f;
+  border: 1px solid #3b1d24;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+  animation: ta-rise 220ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+/* Breaking-news bar: the red pulses so it reads as live, not as a static
+   error card. */
+.ta-ticker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: 13px 13px 0 0;
+  background: #b91c1c;
+  animation: ta-pulse 1.8s ease-in-out infinite;
+}
+.ta-ticker-tag {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: #fff;
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+.ta-ticker-text {
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.ta-body { padding: 22px 24px 24px; }
+
+.ta-plate {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #f4f4f4;
+}
+.ta-sub { margin: 4px 0 18px; font-size: 13.5px; color: #9aa0b4; text-transform: capitalize; }
+
+.ta-shots { display: flex; gap: 12px; flex-wrap: wrap; }
+.ta-shot { flex: 1 1 200px; margin: 0; }
+.ta-shot img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #2a2d45;
+  background: #0b0c14;
+}
+.ta-shot figcaption { margin-top: 6px; font-size: 11px; color: #777d90; }
+
+.ta-facts {
+  margin: 18px 0 0;
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: #0e0f19;
+  border: 1px solid #22243a;
+}
+.ta-facts > div { display: flex; justify-content: space-between; gap: 14px; }
+.ta-facts dt { font-size: 12px; color: #777d90; }
+.ta-facts dd { margin: 0; font-size: 12.5px; color: #d8dae4; text-align: right; word-break: break-word; }
+.ta-facts a { color: #7dd3fc; }
+
+.ta-prompt {
+  margin: 20px 0 14px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #f4f4f4;
+  text-align: center;
+}
+
+.ta-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.ta-btn {
+  flex: 1 1 160px;
+  padding: 13px 16px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.ta-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.ta-btn-sos { background: #dc2626; color: #fff; }
+.ta-btn-sos:not(:disabled):hover { background: #b91c1c; }
+.ta-btn-ghost { background: transparent; border: 1px solid #2a2d45; color: #aaa; }
+.ta-btn-ghost:not(:disabled):hover { background: #1a1c30; color: #f4f4f4; }
+
+.ta-fineprint { margin: 12px 0 0; font-size: 11px; color: #6b7183; text-align: center; }
+
+@keyframes ta-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ta-rise {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ta-pulse {
+  0%, 100% { background: #b91c1c; }
+  50% { background: #ef4444; }
+}
+
+/* Respect a reduced-motion preference — the alert still needs to be loud,
+   but it doesn't need to move to do that. */
+@media (prefers-reduced-motion: reduce) {
+  .ta-backdrop, .ta-modal, .ta-ticker { animation: none; }
+}

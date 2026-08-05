@@ -2,5 +2,7 @@
 .env
 serviceAccountKey.json
 
-# Tesseract OCR downloads its language model to disk on first use
+# Left over from the Tesseract OCR the ANPR service replaced — kept so stale
+# copies on existing checkouts can't be committed by accident
 eng.traineddata
+nep.traineddata

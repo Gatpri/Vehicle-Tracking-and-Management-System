@@ -4,6 +4,8 @@ import "../styles/theme.css";
 import "../app_pages/AppPages.css";
 import "./AppLayout.css";
 import { useAuth } from "../lib/useAuth";
+import TheftAlertOverlay from "./TheftAlertOverlay";
+import NotificationBell from "./NotificationBell";
 
 const NAV_LINKS = [
   { to: "/vehicles", label: "Vehicles" },
@@ -42,6 +44,7 @@ function AppLayout({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="al-user">
+            <NotificationBell />
             {user && <span className="al-user-name">{user.firstname}</span>}
             <button className="uh-btn uh-btn-outline uh-btn-sm" onClick={logout}>Logout</button>
           </div>
@@ -49,6 +52,9 @@ function AppLayout({ children }: { children: ReactNode }) {
       </header>
 
       <main className="al-main">{children}</main>
+
+      {/* Global: a stolen-vehicle sighting must interrupt the owner on any page. */}
+      <TheftAlertOverlay />
     </div>
   );
 }

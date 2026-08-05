@@ -4,11 +4,15 @@ import { Link } from "react-router-dom";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { toast } from 'react-toastify';
+import { auth, googleProvider } from "../../firebase";
+import { signInWithPopup } from "firebase/auth";
+import { landingPathFor } from "../../lib/roles";
 
 function Login() {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isSigning, setIsSigning] = useState(false);
   const navigate =useNavigate();
 
   const handleSubmit = async (e: FormEvent) => {
@@ -28,13 +32,9 @@ if (result.data.success) {
   // keep this
   localStorage.setItem("user", JSON.stringify(result.data.user));
 
-  const role = result.data.user.role;
-
-  if (role === "admin" || role === "superadmin") {
-    navigate("/dashboard");
-  } else {
-    navigate("/home");
-  }
+  // Each role has its own landing page — a vehicle-tracking-admin has no
+  // access to /dashboard, so sending them there would just bounce.
+  navigate(landingPathFor(result.data.user.role));
 }
 
     } catch (err) {
@@ -46,7 +46,34 @@ if (result.data.success) {
       if (backend?.message) toast.error(backend.message);
     }
   };
-  
+
+  // Same flow as the signup page: /google-auth creates the account on first
+  // sign-in and returns the existing one afterwards, so one handler covers both.
+  const handleGoogleSignIn = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    if (isSigning) return;
+    setIsSigning(true);
+    try {
+      googleProvider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(auth, googleProvider);
+      const idToken = await result.user.getIdToken();
+      const response = await axios.post("http://localhost:3000/google-auth", { idToken });
+      if (response.data.success) {
+        localStorage.setItem("user", JSON.stringify(response.data.user));
+        localStorage.setItem("token", response.data.token);
+        toast.success("Login Successful!");
+        navigate(landingPathFor(response.data.user.role));
+      } else {
+        toast.error("Google login failed");
+      }
+    } catch (error) {
+      console.error("Google Sign-In error:", error);
+      toast.error(error instanceof Error ? error.message : "Google Sign-In failed");
+    } finally {
+      setIsSigning(false);
+    }
+  };
+
   return (
     <div className="login">
       <div className="container">
@@ -102,6 +129,13 @@ if (result.data.success) {
                 Login
               </button>
             </div>
+
+            <div className="google_button">
+              <button type="button" id="google_button" onClick={handleGoogleSignIn} disabled={isSigning}>
+                {isSigning ? "Signing in..." : "Sign in with Google"}
+              </button>
+            </div>
+
             <Link to="/recover" className="forget_password">
               Forget Password
             </Link>

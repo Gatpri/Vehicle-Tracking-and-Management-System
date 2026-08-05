@@ -12,6 +12,7 @@ interface Vehicle {
   color?: string;
   vehicleType: string;
   status: "active" | "stolen" | "inactive";
+  images: string[];
 }
 
 const statusBadge = (status: string) => {
@@ -146,9 +147,11 @@ function VehiclesPage() {
                 <h3>{v.plateNumber}</h3>
                 <span className={statusBadge(v.status)}>{v.status}</span>
               </div>
+              {v.images?.[0] && <img className="ap-item-thumb" src={v.images[0]} alt={v.plateNumber} />}
               <div className="ap-item-meta">
                 <span>{v.make} {v.model} {v.year ? `(${v.year})` : ""}</span>
                 <span>{v.color} · {v.vehicleType}</span>
+                {!v.images?.[0] && <span className="ap-item-warn">No photo — add one for theft alerts</span>}
               </div>
             </Link>
           ))}

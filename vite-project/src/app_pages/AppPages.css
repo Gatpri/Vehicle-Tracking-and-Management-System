@@ -70,6 +70,11 @@ a.ap-item-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
   margin-bottom: 24px;
 }
 .ap-balance-label { font-size: 13px; opacity: 0.8; }
+/* Money held against a withdrawal under review — not spendable, but not gone
+   either, so it's shown rather than silently missing from the balance. */
+.ap-balance-pending { font-size: 12px; opacity: 0.85; margin-top: 6px; }
+.ap-amount-in { color: #16a34a; font-weight: 600; white-space: nowrap; }
+.ap-amount-out { color: #dc2626; font-weight: 600; white-space: nowrap; }
 .ap-balance-amount { font-family: "Poppins", sans-serif; font-size: 36px; font-weight: 700; margin-top: 6px; }
 
 /* Chat */
@@ -118,4 +123,232 @@ a.ap-item-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
 @media (max-width: 800px) {
   .ap-chat-layout { grid-template-columns: 1fr; height: auto; }
   .ap-chat-list { flex-direction: row; overflow-x: auto; }
+}
+
+.ap-item-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 6px;
+  margin: 10px 0 2px;
+  background: #0b0c14;
+}
+.ap-item-warn { color: #f59e0b; font-size: 11.5px; }
+
+/* "How do you want to pay?" — shown under a booking when Pay Now is clicked */
+.ap-pay-choice {
+  margin: 8px 0 18px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border, #2a2d45);
+  background: #12131f;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ap-pay-amount { font-size: 13px; color: #9aa0b4; }
+.ap-pay-amount strong { color: #f4f4f4; font-size: 15px; margin-left: 4px; }
+
+.ap-pay-options { display: flex; gap: 10px; flex-wrap: wrap; }
+.ap-pay-option {
+  flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 15px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #2a2d45);
+  background: #0e0f19;
+  color: #f4f4f4;
+  text-align: left;
+  cursor: pointer;
+}
+.ap-pay-option:not(:disabled):hover { border-color: #3b82f6; background: #17203a; }
+.ap-pay-option:disabled { opacity: 0.5; cursor: not-allowed; }
+.ap-pay-option-name { font-size: 13.5px; font-weight: 600; }
+.ap-pay-option-sub { font-size: 11.5px; color: #9aa0b4; }
+
+/* Vehicle service history */
+.sh-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+  margin-bottom: 26px;
+}
+.sh-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--border, #2a2d45);
+  background: #12131f;
+}
+.sh-stat-value { font-size: 22px; font-weight: 700; color: #f4f4f4; }
+.sh-stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: #777d90; }
+
+.sh-timeline { display: flex; flex-direction: column; gap: 16px; }
+.sh-entry {
+  border: 1px solid var(--border, #2a2d45);
+  border-radius: 10px;
+  background: #12131f;
+  padding: 18px;
+  /* The accent bar makes the list read as a timeline rather than as cards. */
+  border-left: 3px solid #3b82f6;
+}
+.sh-entry-head { display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.sh-entry-title { display: flex; align-items: center; gap: 12px; }
+.sh-entry-title h3 { margin: 0; font-size: 15px; color: #f4f4f4; text-transform: capitalize; }
+.sh-entry-sub { font-size: 12px; color: #9aa0b4; }
+.sh-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #2a2d45;
+  background: #0b0c14;
+}
+.sh-entry-when { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; color: #ccc; }
+.sh-interval { font-size: 11px; color: #f59e0b; }
+.sh-notes { margin: 12px 0 0; font-size: 13px; color: #bbb; }
+
+.sh-parts { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13px; }
+.sh-parts th {
+  text-align: left;
+  padding: 7px 9px;
+  border-bottom: 1px solid #2a2d45;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #777d90;
+}
+.sh-parts td { padding: 8px 9px; border-bottom: 1px solid #1c1e30; color: #ddd; }
+.sh-parts tfoot td { border-bottom: none; font-weight: 600; color: #f4f4f4; }
+.sh-right { text-align: right; }
+
+.sh-entry-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #2a2d45;
+  font-size: 12px;
+  color: #777d90;
+}
+.sh-entry-foot strong { font-size: 17px; color: #4ade80; }
+
+/* Workshop filter bar */
+.ap-filter-card { margin-bottom: 24px; display: flex; flex-direction: column; gap: 16px; }
+.ap-filter-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.ap-filter-group { display: flex; flex-direction: column; gap: 8px; }
+.ap-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #888;
+}
+.ap-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.ap-chip {
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border, #2a2d45);
+  background: transparent;
+  color: #aaa;
+  font-size: 12.5px;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+.ap-chip:hover { border-color: #4b5070; color: #f4f4f4; }
+.ap-chip.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+
+.ap-item-brands { color: #7dd3fc; font-size: 11.5px; }
+
+/* Reviews */
+.ap-review-summary {
+  margin-left: 10px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #34d399;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ap-review-form { margin-bottom: 18px; }
+.ap-review-row { align-items: flex-start; gap: 12px; }
+.ap-review-author { font-weight: 400; color: #9aa0b4; font-size: 12.5px; }
+.ap-review-date { font-size: 11px; color: #6b7183; margin-top: 4px; }
+
+/* Vehicle theft-evidence photos */
+.ap-photo-hint { font-size: 12px; color: #888; margin: -8px 0 14px; }
+.ap-photo-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; }
+.ap-photo-head { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #ccc; }
+.ap-photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.ap-photo { position: relative; margin: 0; }
+.ap-photo img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border, #2a2d45);
+  background: #0b0c14;
+}
+.ap-photo-primary {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(11, 12, 20, 0.82);
+  color: #7dd3fc;
+  font-size: 10px;
+  font-weight: 600;
+}
+.ap-photo-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(11, 12, 20, 0.82);
+  color: #fca5a5;
+  font-size: 11px;
+  cursor: pointer;
+}
+.ap-photo-remove:hover { background: #b91c1c; color: #fff; }
+.ap-photo-empty {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  max-width: 200px;
+  border: 1px dashed var(--border, #2a2d45);
+  border-radius: 8px;
+  color: #666;
+  font-size: 12px;
+}
+/* A file input styled as a button — the input itself is hidden. */
+.ap-photo-upload { display: inline-block; margin-top: 12px; cursor: pointer; }
+
+/* Theft heatmap legend + markers */
+.ap-heat-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #888;
+  margin: -8px 0 12px;
+}
+.ap-heat-key { display: inline-flex; align-items: center; gap: 5px; }
+.ap-heat-key i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* Hot clusters pop so the eye lands on them before reading anything. */
+.ap-heat-pulse { animation: ap-heat-pop 1.8s ease-in-out infinite; transform-origin: center; }
+@keyframes ap-heat-pop {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ap-heat-pulse { animation: none; }
 }

@@ -1,6 +1,7 @@
 import { registerTrackingHandlers } from "./trackingHandlers.js";
 import { registerChatHandlers } from "./chatHandlers.js";
 import { registerSosHandlers } from "./sosHandlers.js";
+import { registerDeliveryHandlers } from "./deliveryHandlers.js";
 
 // config/socket.js owns the transport-level concerns (JWT auth, room
 // auto-join on connect). This registers the domain-specific event handlers
@@ -10,5 +11,6 @@ export const registerHandlers = (io) => {
     registerTrackingHandlers(socket);
     registerChatHandlers(socket);
     registerSosHandlers(socket);
+    registerDeliveryHandlers(socket);
   });
 };

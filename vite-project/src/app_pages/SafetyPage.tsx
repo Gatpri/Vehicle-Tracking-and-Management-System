@@ -4,11 +4,22 @@ import "leaflet/dist/leaflet.css";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 
+// One cluster of nearby incidents, not one incident — the backend groups them
+// by proximity so a repeatedly-hit spot reads hotter than a one-off.
 interface HeatPoint {
   location: { lat: number; lng: number };
-  status: string;
-  createdAt: string;
+  count: number;
+  intensity: "high" | "medium" | "low";
+  latestAt: string;
+  sources: { report?: number; camera?: number; sos?: number };
+  confirmed: boolean;
 }
+
+const INTENSITY_STYLE = {
+  high: { color: "#ef4444", label: "High" },
+  medium: { color: "#f97316", label: "Medium" },
+  low: { color: "#22c55e", label: "Minimal" },
+} as const;
 interface TheftReport {
   _id: string;
   vehicle: { plateNumber: string; make: string; model: string };
@@ -129,14 +140,49 @@ function SafetyPage() {
       )}
 
       <div className="ap-section-title">Theft Heatmap</div>
+      <p className="ap-heat-legend">
+        Circles grow and redden with how many incidents cluster in one spot.
+        <span className="ap-heat-key"><i style={{ background: INTENSITY_STYLE.high.color }} /> High (5+)</span>
+        <span className="ap-heat-key"><i style={{ background: INTENSITY_STYLE.medium.color }} /> Medium (2-4)</span>
+        <span className="ap-heat-key"><i style={{ background: INTENSITY_STYLE.low.color }} /> Minimal (1)</span>
+      </p>
       <div className="ap-map-wrap short" style={{ marginBottom: 28 }}>
         <MapContainer center={center} zoom={12} style={{ height: "100%", width: "100%" }}>
           <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-          {points.map((p, i) => (
-            <CircleMarker key={i} center={[p.location.lat, p.location.lng]} radius={9} pathOptions={{ color: "#ef4444", fillOpacity: 0.5 }}>
-              <Popup>Reported {new Date(p.createdAt).toLocaleDateString()}</Popup>
-            </CircleMarker>
-          ))}
+          {points.map((p, i) => {
+            const style = INTENSITY_STYLE[p.intensity];
+            return (
+              <CircleMarker
+                key={i}
+                center={[p.location.lat, p.location.lng]}
+                // Scale with the count so a hot cluster reads at a glance,
+                // capped so one bad junction can't swallow the map.
+                radius={Math.min(9 + p.count * 2.5, 26)}
+                className={p.intensity === "high" ? "ap-heat-pulse" : undefined}
+                pathOptions={{ color: style.color, fillColor: style.color, fillOpacity: 0.35, weight: 2 }}
+              >
+                <Popup>
+                  <strong>{style.label} risk</strong> — {p.count} incident{p.count === 1 ? "" : "s"}
+                  <br />
+                  {[
+                    p.sources.camera && `${p.sources.camera} camera detection${p.sources.camera === 1 ? "" : "s"}`,
+                    p.sources.report && `${p.sources.report} owner report${p.sources.report === 1 ? "" : "s"}`,
+                    p.sources.sos && `${p.sources.sos} confirmed SOS`,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
+                  <br />
+                  Latest: {new Date(p.latestAt).toLocaleDateString()}
+                  {p.confirmed && (
+                    <>
+                      <br />
+                      <strong style={{ color: "#b91c1c" }}>Owner-confirmed theft</strong>
+                    </>
+                  )}
+                </Popup>
+              </CircleMarker>
+            );
+          })}
         </MapContainer>
       </div>
 

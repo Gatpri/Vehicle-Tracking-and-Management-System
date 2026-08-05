@@ -1,0 +1,25 @@
+{
+  "_comment": "Extra Nepali slang for review sentiment. Score runs -1.0 (worst) to +1.0 (best); near 0 is neutral. SINGLE WORDS ONLY - the scorer matches word by word, so a phrase will never match. Add romanized and Devanagari as separate entries, and list spelling variants separately, since romanized Nepali is not standardised. Keys starting with _ are ignored. Test with:  python nepali_lexicon.py \"your phrase here\"",
+
+  "chhya": -0.7,
+  "छ्या": -0.7,
+  "lattu": -0.7,
+  "jhilke": -0.6,
+  "aalchi": -0.7,
+  "alchi": -0.7,
+  "अल्छी": -0.7,
+  "jhagada": -0.7,
+  "झगडा": -0.7,
+  "risayo": -0.5,
+  "रिसायो": -0.5,
+  "napunne": -0.6,
+  "adhuro": -0.6,
+  "अधुरो": -0.6,
+
+  "prasanna": 0.7,
+  "प्रसन्न": 0.7,
+  "sipalu": 0.8,
+  "सिपालु": 0.8,
+  "bhorosilo": 0.8,
+  "भरोसिलो": 0.8
+}

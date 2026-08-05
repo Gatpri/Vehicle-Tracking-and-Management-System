@@ -1,5 +1,8 @@
 import TheftReport from "../models/TheftReport.js";
 import Vehicle from "../models/Vehicle.js";
+import CameraSighting from "../models/CameraSighting.js";
+import SOSAlert from "../models/SOSAlert.js";
+import { clusterIncidents } from "../utils/heatCluster.js";
 import { getIO } from "../config/socket.js";
 
 export const createReport = async (req, res) => {
@@ -43,11 +46,46 @@ export const listMyReports = async (req, res) => {
 };
 
 // Public, unauthenticated — stripped down to just what a map needs, no
-// reporter/vehicle identity, so this is safe to expose without a login.
+// reporter/vehicle identity, so this is safe to expose without a login and
+// every role sees the same picture.
+//
+// Merges owner-filed reports, stolen-vehicle CCTV sightings with a known camera
+// location, and owner-confirmed theft SOS alerts, then clusters them by
+// proximity: the map colours each cluster by how many incidents it holds, so a
+// repeatedly-hit junction reads hot and a one-off reads cold.
 export const getHeatmap = async (req, res) => {
   try {
-    const reports = await TheftReport.find({ status: "open" }).select("location createdAt status -_id");
-    res.json({ success: true, points: reports });
+    const [reports, sightings, sosAlerts] = await Promise.all([
+      TheftReport.find({ status: "open" }).select("location createdAt status -_id"),
+      CameraSighting.find({
+        matchedStolen: true,
+        "location.lat": { $ne: null },
+        "location.lng": { $ne: null },
+      }).select("location createdAt cameraId -_id"),
+      SOSAlert.find({
+        kind: "theft",
+        "sightingLocation.lat": { $ne: null },
+        "sightingLocation.lng": { $ne: null },
+      }).select("sightingLocation createdAt cameraId -_id"),
+    ]);
+
+    const incidents = [
+      ...reports.map((r) => ({ location: r.location, createdAt: r.createdAt, source: "report" })),
+      ...sightings.map((s) => ({
+        location: s.location,
+        createdAt: s.createdAt,
+        source: "camera",
+        cameraId: s.cameraId,
+      })),
+      ...sosAlerts.map((a) => ({
+        location: a.sightingLocation,
+        createdAt: a.createdAt,
+        source: "sos",
+        cameraId: a.cameraId,
+      })),
+    ];
+
+    res.json({ success: true, points: clusterIncidents(incidents) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

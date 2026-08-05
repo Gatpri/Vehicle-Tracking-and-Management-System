@@ -2,6 +2,7 @@ import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Conversation from "../models/Conversation.js";
+import { isAdminRole, hasPermission } from "../policies/permissions.js";
 
 let io = null;
 
@@ -28,8 +29,13 @@ export const initSocket = (httpServer, corsOptions) => {
 
   io.on("connection", async (socket) => {
     socket.join(`user:${socket.user._id}`);
-    if (socket.user.role === "admin" || socket.user.role === "superadmin") {
+    if (isAdminRole(socket.user.role)) {
       socket.join("admins");
+    }
+    // Separate room so a new withdrawal pings only the people who action them,
+    // rather than every admin on the platform.
+    if (hasPermission(socket.user.role, "withdrawal:review", socket.user.permissions)) {
+      socket.join("accounting");
     }
 
     // Join every conversation room this user is already part of, so a
