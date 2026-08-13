@@ -74,7 +74,7 @@ function App(){
         const result = await getRedirectResult(auth);
         if (result && result.user) {
           const idToken = await result.user.getIdToken();
-          const response = await axios.post("http://localhost:3000/google-auth", { idToken, email: result.user.email, displayName: result.user.displayName });
+          const response = await axios.post("/api/google-auth", { idToken, email: result.user.email, displayName: result.user.displayName });
           if (response.data.success) {
             // Persist the session before navigating: without this the redirect
             // flow left localStorage empty, so ProtectedRoute saw no user and
@@ -108,7 +108,7 @@ function App(){
     aria-label="notifications" />
 <Routes>
 
-   <Route path="/" element={<Navigate to="/signin" />} />
+   <Route path="/" element={<Home />} />
   <Route path = "/signin" element={<Signin />}/>
 <Route path = "/login" element={<Login />}/>
 <Route path = "/recover" element={<Recover />}/>

@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { hasPermission } from "../policies/permissions.js";
+import { JWT_SECRET } from "../config/jwt.js";
 
 // Verify JWT and attach user to req
 export const verifyToken = async (req, res, next) => {
@@ -12,7 +13,7 @@ export const verifyToken = async (req, res, next) => {
 
 const token = authHeader.split(" ")[1];
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-this");
+    const decoded = jwt.verify(token, JWT_SECRET);
     const user = await User.findOne({ email: decoded.email }).select("-password");
 
     if (!user) {

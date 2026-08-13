@@ -2,6 +2,7 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { JWT_SECRET } from "../config/jwt.js";
 
 const router = express.Router();
 
@@ -11,7 +12,10 @@ const LOCKOUT_SECONDS = 900; // 15 minutes
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    const ip = req.ip;
+    // Mongoose Map keys can't contain "." — req.ip comes back as an
+    // IPv4-mapped IPv6 address behind nginx (e.g. "::ffff:172.18.0.2"),
+    // which breaks loginAttempts.set() below unless the dots are swapped out.
+    const ip = (req.ip || "unknown").replace(/\./g, "_");
 
     const user = await User.findOne({ email }); // need password hash to compare below
 
@@ -66,7 +70,7 @@ router.post("/login", async (req, res) => {
 
     const token = jwt.sign(
       { userId: user._id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || "your-secret-key-change-this",
+      JWT_SECRET,
       { expiresIn: "24h" }
     );
 

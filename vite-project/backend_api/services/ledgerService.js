@@ -2,6 +2,8 @@ import Wallet from "../models/Wallet.js";
 import Transaction from "../models/Transaction.js";
 import Delivery from "../models/Delivery.js";
 import { getIO } from "../config/socket.js";
+import { moveBookingTo } from "./bookingStatusService.js";
+import { BOOKING_STATUS, canTransition } from "../constants/bookingWorkflow.js";
 
 // The platform's cut of every booking payment. Real money for the whole
 // booking already sits in the company's eSewa account (that's where top-ups
@@ -131,6 +133,13 @@ export const settleBookingPayment = async ({ booking, customerWallet, workshopOw
 
   booking.paymentStatus = "paid";
   await booking.save();
+
+  // Money is in. The booking waits here until the workshop signs the job off
+  // by hand ("Complete") — that step is what releases the vehicle, so nothing
+  // advances automatically from payment any more.
+  if (canTransition(booking, BOOKING_STATUS.PAYMENT_COMPLETED)) {
+    await moveBookingTo(booking, BOOKING_STATUS.PAYMENT_COMPLETED);
+  }
 
   // Pay out the delivery fee now if a leg with staff already exists
   // (almost always the pickup leg, the only one that can exist before

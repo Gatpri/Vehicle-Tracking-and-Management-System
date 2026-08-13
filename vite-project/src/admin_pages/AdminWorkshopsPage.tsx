@@ -6,6 +6,9 @@ import { isWorkshopAdmin } from "../lib/roles";
 import { getCurrentUser } from "../lib/useAuth";
 import MyWorkshopPanel from "./MyWorkshopPanel";
 import WorkshopReviewsPanel from "./WorkshopReviewsPanel";
+import ServicesTableEditor, { type ServiceRow } from "../components/ServicesTableEditor";
+import ServicesTableView from "../components/ServicesTableView";
+import WorkshopChangeRequestsPanel from "./WorkshopChangeRequestsPanel";
 import "./AdminPages.css";
 
 interface Workshop {
@@ -13,21 +16,12 @@ interface Workshop {
   name: string;
   address: string;
   area?: string;
+  region?: string;
   status: string;
-  servicesOffered: { serviceType: string; basePrice: number }[];
+  servicesOffered: ServiceRow[];
   managedBy: string | null;
-}
-
-function parseServices(raw: string) {
-  return raw
-    .split(",")
-    .map((tok) => tok.trim())
-    .filter(Boolean)
-    .map((tok) => {
-      const [serviceType, price] = tok.split(":").map((s) => s.trim());
-      return { serviceType, basePrice: Number(price) };
-    })
-    .filter((s) => s.serviceType && !Number.isNaN(s.basePrice));
+  rating: { average: number; count: number };
+  sentiment: { score: number; positiveRatio: number; scoredCount: number };
 }
 
 function AdminWorkshopsPage() {
@@ -41,9 +35,14 @@ function AdminWorkshopsPage() {
   const [area, setArea] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
-  const [servicesRaw, setServicesRaw] = useState("");
+  const [services, setServices] = useState<ServiceRow[]>([]);
   const [brands, setBrands] = useState<string[]>([]);
   const [types, setTypes] = useState<string[]>([]);
+  // Which workshop's price list is expanded, and which is being edited.
+  const [openServicesId, setOpenServicesId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editRows, setEditRows] = useState<ServiceRow[]>([]);
+  const [savingServices, setSavingServices] = useState(false);
   const currentUser = getCurrentUser();
   // Email of the account being assigned as manager, keyed by workshop id.
   const [managerEmail, setManagerEmail] = useState<Record<string, string>>({});
@@ -52,6 +51,23 @@ function AdminWorkshopsPage() {
   // own garage id once MyWorkshopPanel has resolved it.
   const [openReviewsId, setOpenReviewsId] = useState<string | null>(null);
   const [myWorkshopId, setMyWorkshopId] = useState<string | null>(null);
+
+  // Admin/superadmin write straight through; a workshop-admin never reaches
+  // this page's edit controls (their own garage is handled by MyWorkshopPanel,
+  // which submits a change request instead).
+  const saveServices = async (workshopId: string) => {
+    setSavingServices(true);
+    try {
+      await api.patch(`/workshops/${workshopId}`, { servicesOffered: editRows });
+      toast.success("Services updated");
+      setEditingId(null);
+      load();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to update services"));
+    } finally {
+      setSavingServices(false);
+    }
+  };
 
   // Assigning by email rather than picking from a user list: email is the
   // unique handle an admin actually has when a garage owner asks for access.
@@ -104,12 +120,12 @@ function AdminWorkshopsPage() {
         address,
         area,
         location: { lat: Number(lat), lng: Number(lng) },
-        servicesOffered: parseServices(servicesRaw),
+        servicesOffered: services,
         brandsSupported: brands,
         bikeTypes: types,
       });
       toast.success("Workshop created");
-      setName(""); setAddress(""); setArea(""); setLat(""); setLng(""); setServicesRaw("");
+      setName(""); setAddress(""); setArea(""); setLat(""); setLng(""); setServices([]);
       setBrands([]); setTypes([]);
       setShowForm(false);
       load();
@@ -159,6 +175,11 @@ function AdminWorkshopsPage() {
         </button>
       </div>
 
+      {/* Sits above the registry so a waiting request is the first thing an
+          admin sees, next to the table it affects. Renders nothing when the
+          queue is empty. */}
+      <WorkshopChangeRequestsPanel onApplied={load} />
+
       {showForm && (
         <form className="add-form" onSubmit={handleSubmit} style={{ flexDirection: "column", alignItems: "stretch", maxWidth: 500 }}>
           <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -172,12 +193,13 @@ function AdminWorkshopsPage() {
             <input placeholder="Latitude" value={lat} onChange={(e) => setLat(e.target.value)} required />
             <input placeholder="Longitude" value={lng} onChange={(e) => setLng(e.target.value)} required />
           </div>
-          <input
-            placeholder="Services e.g. oil_change:150000, tire_change:80000 (paisa)"
-            value={servicesRaw}
-            onChange={(e) => setServicesRaw(e.target.value)}
-            style={{ width: "100%" }}
-          />
+          {/* A real table rather than the old "name:paisa, name:paisa" string:
+              that format silently dropped anything it couldn't parse and hid
+              the fact prices were in paisa. */}
+          <div className="adm-ws-picker">
+            <span className="adm-ws-picker-label">Services &amp; prices</span>
+            <ServicesTableEditor rows={services} onChange={setServices} />
+          </div>
           {/* Drives the customer-facing brand and type filters. Leaving these
               empty marks the workshop "unspecified", which keeps it out of
               filtered searches rather than falsely claiming every brand. */}
@@ -225,14 +247,41 @@ function AdminWorkshopsPage() {
         <p className="adm-empty">No workshops.</p>
       ) : (
         <table className="dash-table">
-          <thead><tr><th>Name</th><th>Address</th><th>Area</th><th>Services</th><th>Manager</th><th>Status</th><th>Action</th></tr></thead>
+          <thead><tr><th>Name</th><th>Address</th><th>Area</th><th>Services</th><th>Rating</th><th>Sentiment</th><th>Manager</th><th>Status</th><th>Action</th></tr></thead>
           <tbody>
             {workshops.map((w) => [
               <tr key={w._id}>
                 <td>{w.name}</td>
                 <td>{w.address}</td>
                 <td>{w.area || "—"}</td>
-                <td>{w.servicesOffered.map((s) => s.serviceType).join(", ")}</td>
+                {/* A count plus a button, rather than every service name run
+                    together in one cell — the full price list opens below. */}
+                <td>
+                  <button
+                    className="adm-camera-toggle"
+                    onClick={() => {
+                      setOpenServicesId(openServicesId === w._id ? null : w._id);
+                      setEditingId(null);
+                    }}
+                  >
+                    {openServicesId === w._id ? "Hide services" : `View services (${w.servicesOffered.length})`}
+                  </button>
+                </td>
+                <td>★ {w.rating.average.toFixed(1)} ({w.rating.count})</td>
+                <td>
+                  {w.sentiment?.scoredCount > 0 ? (
+                    <>
+                      <div style={{ color: w.sentiment.score > 0 ? '#4ade80' : w.sentiment.score < 0 ? '#f87171' : '#94a3b8' }}>
+                        {w.sentiment.score > 0 ? '+' : ''}{w.sentiment.score.toFixed(2)}
+                      </div>
+                      <div className="adm-sub">
+                        {Math.round(w.sentiment.positiveRatio * 100)}% positive ({w.sentiment.scoredCount} analyzed)
+                      </div>
+                    </>
+                  ) : (
+                    <span className="adm-sub">No analysis</span>
+                  )}
+                </td>
                 <td>
                   {/* Assigning a manager both links the garage and promotes a
                       plain user to workshop-admin, so it's one action. */}
@@ -263,9 +312,45 @@ function AdminWorkshopsPage() {
                   <button className="delete-btn" onClick={() => handleDelete(w._id)}>Delete</button>
                 </td>
               </tr>,
+              openServicesId === w._id && (
+                <tr key={`${w._id}-services`}>
+                  <td colSpan={9} style={{ background: "#0e0f19", padding: 14 }}>
+                    <div className="adm-sub" style={{ marginBottom: 10 }}>{w.name} — services &amp; prices</div>
+                    {editingId === w._id ? (
+                      <>
+                        <ServicesTableEditor rows={editRows} onChange={setEditRows} />
+                        <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                          <button
+                            className="uh-btn uh-btn-sm uh-btn-primary"
+                            disabled={savingServices}
+                            onClick={() => saveServices(w._id)}
+                          >
+                            {savingServices ? "Saving..." : "Save services"}
+                          </button>
+                          <button className="adm-camera-toggle" onClick={() => setEditingId(null)}>
+                            Cancel
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <ServicesTableView rows={w.servicesOffered} />
+                        <div style={{ marginTop: 10 }}>
+                          <button
+                            className="uh-btn uh-btn-sm uh-btn-primary"
+                            onClick={() => { setEditingId(w._id); setEditRows(w.servicesOffered.map((s) => ({ ...s }))); }}
+                          >
+                            Edit services
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ),
               openReviewsId === w._id && (
                 <tr key={`${w._id}-reviews`}>
-                  <td colSpan={7} style={{ background: "#0e0f19", padding: 14 }}>
+                  <td colSpan={9} style={{ background: "#0e0f19", padding: 14 }}>
                     <div className="adm-sub" style={{ marginBottom: 10 }}>{w.name}</div>
                     <WorkshopReviewsPanel workshopId={w._id} />
                   </td>

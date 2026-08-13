@@ -1,6 +1,12 @@
-import { useSearchParams, Link } from "react-router-dom";
+import { useEffect } from "react";
+import { useSearchParams, Link, useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import "../../home_components/Styles/home.css";
 import "../styles/EmailVerified.css";
+
+// Long enough for the success message to actually be read before the page
+// moves itself to home.
+const REDIRECT_DELAY_MS = 3000;
 
 const IconCheck = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -40,8 +46,20 @@ const CONTENT: Record<string, { ok: boolean; title: string; text: string }> = {
 
 function EmailVerified() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const status = searchParams.get("status") || "error";
   const { ok, title, text } = CONTENT[status] ?? CONTENT.error;
+
+  // On success, announce it and send this tab to home on its own. This is the
+  // tab the email client opened, which may well be a different browser from
+  // the one used to sign up — so it can't rely on the signup tab's polling.
+  useEffect(() => {
+    if (!ok) return;
+
+    toast.success("Account created successfully!");
+    const timer = setTimeout(() => navigate("/"), REDIRECT_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [ok, navigate]);
 
   return (
     <div className="uh">
@@ -60,7 +78,10 @@ function EmailVerified() {
           <p className="ev-text">{text}</p>
 
           {ok ? (
-            <Link to="/login" className="uh-btn uh-btn-primary uh-btn-lg">Continue to Login</Link>
+            <>
+              <Link to="/" className="uh-btn uh-btn-primary uh-btn-lg">Go to Home</Link>
+              <p className="ev-redirect-note">Taking you to the home page…</p>
+            </>
           ) : (
             <Link to="/signin" className="uh-btn uh-btn-primary uh-btn-lg">Register Again</Link>
           )}

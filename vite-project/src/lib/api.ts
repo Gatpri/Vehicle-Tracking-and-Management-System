@@ -1,7 +1,11 @@
 import axios from "axios";
 
+// Relative path so requests go through nginx's /api proxy on whatever host
+// the browser used to load the page (localhost, a LAN IP, a tunnel domain,
+// etc.) instead of hardcoding the backend's own host:port, which only ever
+// worked when the browser happened to be on the same machine as Docker.
 export const api = axios.create({
-  baseURL: "http://localhost:3000",
+  baseURL: "/api",
 });
 
 api.interceptors.request.use((config) => {

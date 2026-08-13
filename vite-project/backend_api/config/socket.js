@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Conversation from "../models/Conversation.js";
 import { isAdminRole, hasPermission } from "../policies/permissions.js";
+import { JWT_SECRET } from "./jwt.js";
 
 let io = null;
 
@@ -16,7 +17,7 @@ export const initSocket = (httpServer, corsOptions) => {
       const token = socket.handshake.auth?.token;
       if (!token) return next(new Error("No token provided"));
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-this");
+      const decoded = jwt.verify(token, JWT_SECRET);
       const user = await User.findOne({ email: decoded.email }).select("-password");
       if (!user) return next(new Error("User not found"));
 

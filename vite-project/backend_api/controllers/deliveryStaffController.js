@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import Delivery from "../models/Delivery.js";
 import DeliveryStaffReview from "../models/DeliveryStaffReview.js";
+import { sameRegion, regionQuery } from "../utils/region.js";
 
 const TERMINAL_STATUSES = ["at_workshop", "delivered"];
 
@@ -10,8 +11,8 @@ const TERMINAL_STATUSES = ["at_workshop", "delivered"];
 export const listDeliveryStaff = async (req, res) => {
   try {
     const filter = { role: "delivery-staff" };
-    if (req.user.role === "delivery-admin") filter.region = req.user.region;
-    else if (req.query.region) filter.region = req.query.region;
+    if (req.user.role === "delivery-admin") filter.region = regionQuery(req.user.region);
+    else if (req.query.region) filter.region = regionQuery(req.query.region);
 
     const staff = await User.find(filter).select(
       "firstname lastname email area region deliveryRating lastKnownLocation lastSeenAt createdAt"
@@ -31,7 +32,7 @@ export const getDeliveryStaffDetail = async (req, res) => {
       "firstname lastname email area region deliveryRating lastKnownLocation lastSeenAt createdAt"
     );
     if (!staff) return res.status(404).json({ success: false, message: "Delivery-staff account not found" });
-    if (req.user.role === "delivery-admin" && staff.region !== req.user.region) {
+    if (req.user.role === "delivery-admin" && !sameRegion(staff.region, req.user.region)) {
       return res.status(403).json({ success: false, message: "Outside your region" });
     }
 
@@ -54,7 +55,7 @@ export const deleteDeliveryStaff = async (req, res) => {
   try {
     const target = await User.findOne({ _id: req.params.id, role: "delivery-staff" });
     if (!target) return res.status(404).json({ success: false, message: "Delivery-staff account not found" });
-    if (req.user.role === "delivery-admin" && target.region !== req.user.region) {
+    if (req.user.role === "delivery-admin" && !sameRegion(target.region, req.user.region)) {
       return res.status(403).json({ success: false, message: "Outside your region" });
     }
 

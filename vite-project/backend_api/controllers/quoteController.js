@@ -5,6 +5,8 @@ import { uploadMedia } from "../services/cloudinaryService.js";
 import { notify } from "../services/notificationService.js";
 import { checkOverpricing } from "../services/pricingService.js";
 import { getIO } from "../config/socket.js";
+import { moveBookingTo } from "../services/bookingStatusService.js";
+import { BOOKING_STATUS, canTransition } from "../constants/bookingWorkflow.js";
 
 const rupees = (paisa) => `Rs ${(paisa / 100).toFixed(2)}`;
 
@@ -149,6 +151,13 @@ export const sendWorkshopRevision = async (req, res) => {
     quote.pendingAcceptance = { total: null, mode: null, at: null };
     quote.status = "awaiting-customer";
     await quote.save();
+
+    // Step 8: sending an estimate puts the booking in estimation-pending —
+    // either the first time (from servicing-started) or on a later round when
+    // extra work turns up mid-job (from estimation-confirmed, step 9).
+    if (canTransition(request, BOOKING_STATUS.ESTIMATION_PENDING)) {
+      await moveBookingTo(request, BOOKING_STATUS.ESTIMATION_PENDING);
+    }
 
     await notify({
       user: request.user,
@@ -313,7 +322,10 @@ export const confirmQuote = async (req, res) => {
       return res.status(403).json({ success: false, message: "Only the workshop can confirm an estimate" });
     }
     // The step that writes finalPrice, so the strictest guard belongs here.
-    const request = await ServiceRequest.findById(req.params.bookingId).select("status paymentStatus serviceType");
+    // deliveryRequested is needed too: it selects which transition map the
+    // booking follows, so omitting it would make every transition look invalid.
+    const request = await ServiceRequest.findById(req.params.bookingId)
+      .select("status statusChangedAt paymentStatus serviceType deliveryRequested user workshop finalPrice");
     const closed = quotingClosedReason(request);
     if (closed) return res.status(409).json({ success: false, message: closed });
 
@@ -345,7 +357,14 @@ export const confirmQuote = async (req, res) => {
     quote.acceptedAt = new Date();
     await quote.save();
 
-    await ServiceRequest.findByIdAndUpdate(quote.serviceRequest, { finalPrice: quote.agreedTotal });
+    request.finalPrice = quote.agreedTotal;
+    await request.save();
+
+    // Step 8 complete: both sides have agreed this round's figure. From here
+    // the workshop either asks for payment (step 9) or opens another round.
+    if (canTransition(request, BOOKING_STATUS.ESTIMATION_CONFIRMED)) {
+      await moveBookingTo(request, BOOKING_STATUS.ESTIMATION_CONFIRMED);
+    }
 
     // Now that there's an actual agreed figure, check it against history for
     // this serviceType — the fraud-sanity check that used to run against a

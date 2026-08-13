@@ -1,1 +1,30 @@
 node_modules
+
+# All config lives in a single .env at the repo root (never committed).
+# .env.example is its committed, placeholder-only twin.
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+
+# Python bytecode caches (regenerated automatically)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Trained YOLO weights — too large for git, but yolo_weights/ is REQUIRED at
+# runtime: docker-compose mounts it read-only into the ANPR service at
+# /app/weights. Keep the folder, just don't commit the .pt files.
+*.pt
+
+# Tesseract OCR data: unused — plates are read via YOLO detection-as-OCR
+*.traineddata
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.log

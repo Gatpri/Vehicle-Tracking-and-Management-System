@@ -7,8 +7,11 @@ let socket: Socket | null = null;
 export const getSocket = (): Socket => {
   if (socket) return socket;
 
+  // No URL: connects to the page's own origin, which nginx proxies to the
+  // backend at /socket.io — works from any host the browser used to load
+  // the page, not just the Docker host itself.
   const token = localStorage.getItem("token");
-  socket = io("http://localhost:3000", {
+  socket = io({
     auth: { token },
     autoConnect: true,
   });

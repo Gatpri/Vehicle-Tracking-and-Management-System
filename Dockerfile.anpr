@@ -1,0 +1,57 @@
+# ANPR Service Dockerfile
+# This service handles YOLO plate detection and LLM-based sentiment analysis
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies ALL AT ONCE
+# Including all OpenCV and X11 libs needed
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    libgomp1 \
+    wget \
+    curl \
+    # OpenCV/OpenGL dependencies
+    libsm6 \
+    libxext6 \
+    libxcb1 \
+    libx11-6 \
+    libglib2.0-0 \
+    libxrender-dev \
+    libxext-dev \
+    libgl1 \
+    # Additional libraries
+    ca-certificates \
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy requirements
+COPY vite-project/anpr_service/requirements.txt ./
+
+# Install Python dependencies
+# Note: This installs CPU-only torch. For GPU, use torch with CUDA support
+RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt || true
+
+# Copy ANPR service code
+COPY vite-project/anpr_service ./
+
+# Create directory for downloaded models
+RUN mkdir -p /app/models
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV TORCH_HOME=/app/models
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Start ANPR service
+CMD ["python", "server.py"]

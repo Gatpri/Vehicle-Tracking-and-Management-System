@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { VEHICLE_BRANDS, BIKE_TYPES } from "../lib/workshopOptions";
+import ServicesTableEditor, { type ServiceRow } from "../components/ServicesTableEditor";
 
 interface Workshop {
   _id: string;
@@ -17,25 +18,6 @@ interface Workshop {
   logoUrl: string;
   rating: { average: number; count: number };
 }
-
-// "oil_change:150000, tire_change:80000" <-> the servicesOffered array. Prices
-// are entered and shown in rupees but stored in paisa, like everywhere else.
-const servicesToText = (services: Workshop["servicesOffered"]) =>
-  services.map((s) => `${s.serviceType}:${s.basePrice / 100}`).join(", ");
-
-const textToServices = (raw: string) =>
-  raw
-    .split(",")
-    .map((chunk) => chunk.trim())
-    .filter(Boolean)
-    .map((chunk) => {
-      const [serviceType, price] = chunk.split(":");
-      return {
-        serviceType: (serviceType ?? "").trim(),
-        basePrice: Math.round((Number(price) || 0) * 100),
-      };
-    })
-    .filter((s) => s.serviceType);
 
 /**
  * Edit one garage's public details. A workshop-admin gets this for the shop
@@ -64,7 +46,8 @@ function MyWorkshopPanel({
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
   const [phone, setPhone] = useState("");
-  const [servicesRaw, setServicesRaw] = useState("");
+  const [services, setServices] = useState<ServiceRow[]>([]);
+  const [pending, setPending] = useState<{ _id: string; createdAt: string } | null>(null);
   const [brands, setBrands] = useState<string[]>([]);
   const [types, setTypes] = useState<string[]>([]);
 
@@ -77,7 +60,7 @@ function MyWorkshopPanel({
     setLat(String(w.location?.lat ?? ""));
     setLng(String(w.location?.lng ?? ""));
     setPhone(w.contactPhone ?? "");
-    setServicesRaw(servicesToText(w.servicesOffered ?? []));
+    setServices((w.servicesOffered ?? []).map((s) => ({ ...s })));
     setBrands(w.brandsSupported ?? []);
     setTypes(w.bikeTypes ?? []);
   };
@@ -91,6 +74,7 @@ function MyWorkshopPanel({
       })
       .catch((err) => setError(getErrorMessage(err, "Couldn't load your workshop")))
       .finally(() => setLoading(false));
+    loadPending();
     // onLoaded is a plain callback from the parent; re-fetching whenever its
     // identity changes would refetch on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -99,34 +83,38 @@ function MyWorkshopPanel({
   const toggle = (value: string, list: string[], setList: (v: string[]) => void) =>
     setList(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
 
+  // A workshop-admin can't write to their garage directly any more: the price
+  // list every booking is billed against needs a second pair of eyes, so this
+  // submits a change request for an admin/superadmin to approve.
   const save = async (e: FormEvent) => {
     e.preventDefault();
     if (!workshop) return;
-    const latNum = Number(lat);
-    const lngNum = Number(lng);
-    if (!Number.isFinite(latNum) || !Number.isFinite(lngNum) || latNum < -90 || latNum > 90 || lngNum < -180 || lngNum > 180) {
-      toast.error("Enter a valid latitude (-90 to 90) and longitude (-180 to 180)");
-      return;
-    }
     setSaving(true);
     try {
-      const res = await api.patch(`/workshops/${workshop._id}`, {
+      await api.post(`/workshops/${workshop._id}/change-requests`, {
         name,
         description,
         address,
         area,
-        location: { lat: latNum, lng: lngNum },
         contactPhone: phone,
-        servicesOffered: textToServices(servicesRaw),
-        brandsSupported: brands,
-        bikeTypes: types,
+        servicesOffered: services,
       });
-      hydrate(res.data.workshop);
-      toast.success("Workshop updated");
+      toast.success("Sent for approval — an admin will review your changes");
+      loadPending();
     } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to save"));
+      toast.error(getErrorMessage(err, "Failed to submit changes"));
     } finally {
       setSaving(false);
+    }
+  };
+
+  // So the garage can see their request is queued rather than resubmitting it.
+  const loadPending = async () => {
+    try {
+      const res = await api.get("/workshop-change-requests", { params: { status: "pending" } });
+      setPending(res.data.requests?.[0] ?? null);
+    } catch {
+      setPending(null);
     }
   };
 
@@ -170,6 +158,12 @@ function MyWorkshopPanel({
 
   return (
     <form className="adm-ws-panel" onSubmit={save}>
+      {pending && (
+        <div className="svc-pending-banner">
+          Changes submitted {new Date(pending.createdAt).toLocaleString()} are waiting for an
+          admin to review. Saving again will replace them once that one is decided.
+        </div>
+      )}
       <div className="adm-ws-identity">
         <div className="adm-ws-logo">
           {workshop.logoUrl
@@ -229,12 +223,10 @@ function MyWorkshopPanel({
 
       <div className="adm-ws-picker">
         <span className="adm-ws-picker-label">Services &amp; prices (Rs)</span>
-        <input
-          placeholder="oil_change:1500, tire_change:800"
-          value={servicesRaw}
-          onChange={(e) => setServicesRaw(e.target.value)}
-        />
-        <span className="adm-ws-hint">Comma separated, as service_name:price in rupees.</span>
+        <ServicesTableEditor rows={services} onChange={setServices} />
+        <span className="adm-ws-hint">
+          Price changes are reviewed by an admin before they go live.
+        </span>
       </div>
 
       <div className="adm-ws-picker">
@@ -270,7 +262,7 @@ function MyWorkshopPanel({
       </div>
 
       <button className="add-btn" type="submit" disabled={saving}>
-        {saving ? "Saving..." : "Save changes"}
+        {saving ? "Submitting..." : "Submit for approval"}
       </button>
     </form>
   );

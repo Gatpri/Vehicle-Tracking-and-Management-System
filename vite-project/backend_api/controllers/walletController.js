@@ -8,6 +8,7 @@ import { buildStatement, summariseStatement } from "../services/statementService
 import { hasPermission } from "../policies/permissions.js";
 import { buildTopupForm, decodeCallbackData, verifyTransactionStatus } from "../services/esewaService.js";
 import { getIO } from "../config/socket.js";
+import { BOOKING_STATUS } from "../constants/bookingWorkflow.js";
 
 const getOrCreateWallet = getOrCreateUserWallet;
 
@@ -36,8 +37,10 @@ const loadPayableBooking = async (bookingId, userId) => {
   if (!booking || !booking.user.equals(userId)) {
     return { error: { status: 404, message: "Booking not found" } };
   }
-  if (booking.status !== "completed") {
-    return { error: { status: 400, message: "Booking isn't completed yet" } };
+  // Step 10: the workshop has to ask for payment first — paying earlier would
+  // jump the estimate steps the whole workflow exists to enforce.
+  if (booking.status !== BOOKING_STATUS.PAYMENT_PENDING) {
+    return { error: { status: 400, message: "This booking isn't awaiting payment yet" } };
   }
   if (booking.paymentStatus === "paid") {
     return { error: { status: 400, message: "Booking is already paid" } };
@@ -142,8 +145,8 @@ export const initiateTopup = async (req, res) => {
     const form = buildTopupForm({
       amountNpr,
       transactionUuid,
-      successUrl: `${process.env.BACKEND_BASE_URL}/wallet/topup/verify`,
-      failureUrl: `${process.env.BACKEND_BASE_URL}/wallet/topup/failure`,
+      successUrl: `${process.env.BACKEND_BASE_URL}/api/wallet/topup/verify`,
+      failureUrl: `${process.env.BACKEND_BASE_URL}/api/wallet/topup/failure`,
     });
 
     res.json({ success: true, ...form });
@@ -279,8 +282,8 @@ export const payBookingWithEsewa = async (req, res) => {
     const form = buildTopupForm({
       amountNpr: amount / 100,
       transactionUuid,
-      successUrl: `${process.env.BACKEND_BASE_URL}/wallet/topup/verify`,
-      failureUrl: `${process.env.BACKEND_BASE_URL}/wallet/topup/failure`,
+      successUrl: `${process.env.BACKEND_BASE_URL}/api/wallet/topup/verify`,
+      failureUrl: `${process.env.BACKEND_BASE_URL}/api/wallet/topup/failure`,
     });
 
     res.json({ success: true, ...form });

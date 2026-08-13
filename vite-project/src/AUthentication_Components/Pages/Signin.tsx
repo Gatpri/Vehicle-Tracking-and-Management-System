@@ -29,13 +29,13 @@ function Signin(){
 
     const interval = setInterval(async () => {
       try {
-        const res = await axios.get("http://localhost:3000/registration-status", {
+        const res = await axios.get("/api/registration-status", {
           params: { email: pendingEmail },
         });
         if (res.data.verified) {
           clearInterval(interval);
-          toast.success("Email verified! Logging you in...");
-          navigate("/login");
+          toast.success("Account created successfully!");
+          navigate("/");
         }
       } catch (err) {
         console.error("registration-status poll failed:", err);
@@ -55,7 +55,7 @@ function Signin(){
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const result = await axios.post("http://localhost:3000/register", {
+      const result = await axios.post("/api/register", {
         firstname,
         lastname,
         email,
@@ -85,7 +85,7 @@ function Signin(){
       googleProvider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, googleProvider);  // result comes back directly
       const idToken = await result.user.getIdToken();
-      const response = await axios.post("http://localhost:3000/google-auth", { idToken });
+      const response = await axios.post("/api/google-auth", { idToken });
       if (response.data.success) {
         localStorage.setItem("user", JSON.stringify(response.data.user));
         localStorage.setItem("token", response.data.token);

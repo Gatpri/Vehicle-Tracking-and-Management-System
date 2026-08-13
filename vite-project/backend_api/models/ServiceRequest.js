@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { BOOKING_STATUS, BOOKING_STATUSES } from "../constants/bookingWorkflow.js";
 
 const ServiceRequestSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
@@ -6,11 +7,20 @@ const ServiceRequestSchema = new mongoose.Schema({
   workshop: { type: mongoose.Schema.Types.ObjectId, ref: "Workshop", required: true, index: true },
   serviceType: { type: String, required: true },
   description: { type: String, default: "" },
+  // The full workflow state — see constants/bookingWorkflow.js for the two
+  // paths (with/without delivery) and the transitions between them. Every
+  // write goes through assertTransition, so a step can never be skipped.
   status: {
     type: String,
-    enum: ["pending", "accepted", "in_progress", "completed", "cancelled"],
-    default: "pending",
+    enum: BOOKING_STATUSES,
+    default: BOOKING_STATUS.PENDING,
+    index: true,
   },
+  // When the current status was entered. The auto-complete sweep uses this to
+  // decide when a booking has sat in its final pre-completion state long
+  // enough (see services/bookingAutoComplete.js); updatedAt would be no good
+  // because unrelated writes bump it.
+  statusChangedAt: { type: Date, default: Date.now },
   quotedPrice: { type: Number, default: null }, // paisa
   finalPrice: { type: Number, default: null }, // paisa
   isOverpriced: { type: Boolean, default: false },

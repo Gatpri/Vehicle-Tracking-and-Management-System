@@ -1,4 +1,4 @@
-"""Local ANPR inference sidecar.
+"""Local ANPR inference sidecar with LLM sentiment analysis.
 
 Serves the project's own trained YOLO weights over HTTP so the Node backend can
 read Nepali plates without calling Roboflow's hosted API. Two stages, same as
@@ -6,11 +6,32 @@ cctv_live.py: stage 1 locates plates in the frame, stage 2 detects+classifies
 each character on the crop (detection-as-OCR — generic OCR engines cannot read
 hand-painted Devanagari).
 
+Also provides LLM-based sentiment analysis using Gemini Flash 2.5 with Mistral fallback.
+
   python server.py            # http://127.0.0.1:8000
 """
 import os
 import threading
 from pathlib import Path
+
+# Load the single consolidated .env at the repo root before anything reads
+# os.environ, so this service shares one config file with the Node backend and
+# the Vite frontend instead of keeping its own copy. Real environment
+# variables take precedence, so Docker-injected config always wins.
+#
+# Walk upwards rather than indexing a fixed parent: on the host this file is
+# at <repo>/vite-project/anpr_service/server.py, but the container flattens it
+# to /app/server.py, where a hardcoded parents[2] does not exist at all.
+try:
+    from dotenv import load_dotenv
+
+    for _candidate in Path(__file__).resolve().parents:
+        _env = _candidate / ".env"
+        if _env.is_file():
+            load_dotenv(_env, override=False)
+            break
+except ImportError:  # python-dotenv is optional; env vars may be exported already
+    pass
 
 import cv2
 import numpy as np
@@ -21,6 +42,15 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from ultralytics import YOLO
+
+# Import Gemini Flash 2.5 (+ Mistral fallback) sentiment analyzer
+try:
+    from llm_sentiment import analyze_sentiment as llm_analyze_sentiment
+    LLM_SENTIMENT_AVAILABLE = True
+except ImportError:
+    LLM_SENTIMENT_AVAILABLE = False
+    print("Warning: LLM sentiment module not available. Install required packages:")
+    print("  pip install google-generativeai mistralai")
 
 WEIGHTS_DIR = Path(
     os.environ.get("ANPR_WEIGHTS_DIR", r"C:\Users\sauga\Downloads\8th sem Proj.v2i.yolov11\weights")
@@ -173,6 +203,7 @@ async def health(request):
         "device": "gpu" if device == 0 else "cpu",
         "weightsDir": str(WEIGHTS_DIR),
         "embossedReader": unified_model is not None,
+        "llmSentiment": LLM_SENTIMENT_AVAILABLE,
     })
 
 
@@ -256,12 +287,71 @@ async def detect(request):
     return JSONResponse(result)
 
 
+async def sentiment_health(request):
+    """Check if Gemini Flash 2.5 (+ Mistral fallback) sentiment analysis is available."""
+    return JSONResponse({
+        "available": LLM_SENTIMENT_AVAILABLE,
+        "service": "gemini-flash-2.5+mistral-fallback",
+        "gemini_api_key_configured": bool(os.environ.get("GEMINI_API_KEY")),
+        "mistral_api_key_configured": bool(os.environ.get("MISTRAL_API_KEY")),
+    })
+
+
+async def analyze_sentiment(request):
+    """Analyze sentiment of text using Gemini Flash 2.5, falling back to Mistral.
+
+    Request body: {"text": "text to analyze"}
+    Returns: Sentiment analysis result
+    """
+    if not LLM_SENTIMENT_AVAILABLE:
+        return JSONResponse({
+            "error": "LLM sentiment analysis not available",
+            "label": "unavailable",
+            "score": 0.0,
+            "confidence": 0.0,
+            "language": "unknown",
+            "modelVersion": "unavailable",
+            "explain": {"source": "module_not_loaded", "reasoning": "LLM sentiment module not loaded"}
+        }, status_code=503)
+
+    try:
+        data = await request.json()
+        text = data.get("text", "").strip()
+
+        if not text:
+            return JSONResponse({
+                "label": "neutral",
+                "score": 0.0,
+                "confidence": 0.0,
+                "language": "english",
+                "modelVersion": "empty_text",
+                "explain": {"source": "empty_text", "matched": []}
+            })
+
+        # Analyze sentiment: Gemini Flash 2.5 first, Mistral as fallback
+        result = await run_in_threadpool(llm_analyze_sentiment, text)
+        return JSONResponse(result)
+        
+    except Exception as e:
+        return JSONResponse({
+            "error": str(e),
+            "label": "unavailable",
+            "score": 0.0,
+            "confidence": 0.0,
+            "language": "unknown",
+            "modelVersion": "error",
+            "explain": {"source": "error", "matched": []}
+        }, status_code=500)
+
+
 app = Starlette(routes=[
     Route("/health", health),
     Route("/detect", detect, methods=["POST"]),
+    Route("/sentiment/health", sentiment_health),
+    Route("/sentiment", analyze_sentiment, methods=["POST"]),
 ])
 
 
 if __name__ == "__main__":
     print(f"ANPR inference on {'GPU' if device == 0 else 'CPU'} · weights: {WEIGHTS_DIR}")
-    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("ANPR_PORT", 8000)))
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("ANPR_PORT", 8000)))

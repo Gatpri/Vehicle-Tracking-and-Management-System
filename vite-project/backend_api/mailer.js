@@ -4,7 +4,7 @@ const requiredVars = ["GMAIL_USER", "GMAIL_APP_PASSWORD"];
 const missing = requiredVars.filter((v) => !process.env[v]);
 if (missing.length) {
   throw new Error(
-    `Missing Gmail SMTP env vars: ${missing.join(", ")}. Make sure backend_api/.env is loaded before route imports.`
+    `Missing Gmail SMTP env vars: ${missing.join(", ")}. Make sure the root .env is loaded before route imports.`
   );
 }
 

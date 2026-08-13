@@ -17,6 +17,10 @@ const vehiclePlatformPermissions = [
   "workshop:create",
   "workshop:update",
   "workshop:delete",
+  // Reviewing a workshop-admin's proposed edits. Paired with
+  // workshop:request-update so an approver can also open the request list.
+  "workshop:review-request",
+  "workshop:request-update",
   "booking:manage",
   "booking:read:any",
   "cctv:submit",
@@ -98,9 +102,13 @@ admin: [
   // permission grants the *capability*, ownership decides the *scope*.
   // No workshop:create or workshop:delete: a garage owner manages the shop
   // they were given, they don't add or remove shops from the platform.
+  //
+  // No workshop:update either: the services table prices every booking, so a
+  // garage can propose edits (workshop:request-update) but an admin approves
+  // them. See submitWorkshopChangeRequest in workshopController.js.
   "workshop-admin": [
     "user:read",
-    "workshop:update",
+    "workshop:request-update",
     "booking:manage",
     "booking:read:any",
     "chat:read:any",

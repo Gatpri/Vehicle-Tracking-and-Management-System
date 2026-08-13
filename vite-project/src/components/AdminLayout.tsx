@@ -57,6 +57,13 @@ function AdminLayout({ children }: { children: ReactNode }) {
       </div>
 
       <nav className="admin-subnav">
+        <NavLink
+          to="/home"
+          end
+          className={({ isActive }) => `admin-subnav-link ${isActive ? "active" : ""}`}
+        >
+          Home
+        </NavLink>
         {links.map((link) => (
           <NavLink
             key={link.to}

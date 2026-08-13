@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import LiveDeliveryMap from "../components/LiveDeliveryMap";
+import { legStatusLabel, BOOKING_STATUS } from "../lib/bookingWorkflow";
 
 interface AssignableRow {
   booking: {
@@ -21,8 +22,14 @@ interface StaffOption {
   lastname: string;
   area: string;
   region: string;
+  // Already mid-delivery elsewhere — the server won't accept an assignment
+  // for them until they finish.
+  busy?: boolean;
 }
 
+// booking/workshop are populated refs, so they come back null if the
+// referenced document has been deleted. Typed as nullable because pretending
+// otherwise is what let one orphaned record throw and blank the whole page.
 interface DeliveryRow {
   _id: string;
   leg: "pickup" | "return";
@@ -32,11 +39,14 @@ interface DeliveryRow {
   // legs (paid once, to whichever single staff member does the round trip).
   booking: {
     serviceType: string;
-    vehicle: { plateNumber: string };
+    // Drives whether Reassign is still offered: once it reads
+    // "delivery-reassigned" the one reassignment has been used.
+    status?: string;
+    vehicle: { plateNumber: string } | null;
     deliveryFee?: number | null;
     distanceKm?: number | null;
-  };
-  workshop: { name: string; area: string; region: string; location?: { lat: number; lng: number } };
+  } | null;
+  workshop: { name: string; area: string; region: string; location?: { lat: number; lng: number } } | null;
   staff: { _id: string; firstname: string; lastname: string } | null;
   customerLocation?: { lat: number; lng: number; address: string };
 }
@@ -54,13 +64,15 @@ const destinationFor = (row: DeliveryRow): { lat: number; lng: number } | undefi
   if (row.leg === "pickup" && EN_ROUTE_PICKUP.includes(row.status)) {
     return row.customerLocation ? { lat: row.customerLocation.lat, lng: row.customerLocation.lng } : undefined;
   }
-  return row.workshop.location;
+  return row.workshop?.location;
 };
+
 
 function AssignRow({ row, onAssigned }: { row: AssignableRow; onAssigned: () => void }) {
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [staffId, setStaffId] = useState("");
   const [assigning, setAssigning] = useState(false);
+  const [assigned, setAssigned] = useState(false);
 
   useEffect(() => {
     api
@@ -78,13 +90,31 @@ function AssignRow({ row, onAssigned }: { row: AssignableRow; onAssigned: () => 
     try {
       await api.post("/deliveries", { bookingId: row.booking._id, leg: row.leg, staffId });
       toast.success("Delivery assigned");
+      // Latch locally so the picker and button vanish on the click rather than
+      // waiting for the refetch — otherwise the row stays live for a moment
+      // and a second click double-submits.
+      setAssigned(true);
       onAssigned();
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to assign delivery"));
-    } finally {
       setAssigning(false);
     }
   };
+
+  // Assigned rows drop out of the assignable list on the next load; until then
+  // show the outcome instead of a live control.
+  if (assigned) {
+    return (
+      <div className="ap-row">
+        <div className="ap-row-main">
+          <span className="ap-row-title">
+            {row.leg === "pickup" ? "Pickup" : "Return"} — {row.booking.vehicle?.plateNumber} — {row.workshop.name}
+          </span>
+        </div>
+        <span className="uh-badge uh-badge-blue">Delivery assigned</span>
+      </div>
+    );
+  }
 
   return (
     <div className="ap-row">
@@ -99,10 +129,15 @@ function AssignRow({ row, onAssigned }: { row: AssignableRow; onAssigned: () => 
         </span>
       </div>
       <div className="ap-row-actions" style={{ gap: 8 }}>
+        {/* Busy staff stay listed but unselectable, so it's obvious the roster
+            is complete and who simply isn't free — the server refuses them
+            anyway, this just says so before the click. */}
         <select value={staffId} onChange={(e) => setStaffId(e.target.value)} style={{ padding: "6px 10px", borderRadius: 8 }}>
           <option value="">Select staff...</option>
           {staffOptions.map((s) => (
-            <option key={s._id} value={s._id}>{s.firstname} {s.lastname} ({s.region || s.area})</option>
+            <option key={s._id} value={s._id} disabled={s.busy}>
+              {s.firstname} {s.lastname} ({s.region || s.area}){s.busy ? " — busy" : ""}
+            </option>
           ))}
         </select>
         <button className="uh-btn uh-btn-sm uh-btn-primary" onClick={assign} disabled={assigning}>
@@ -113,23 +148,58 @@ function AssignRow({ row, onAssigned }: { row: AssignableRow; onAssigned: () => 
   );
 }
 
-function InFlightRow({ row }: { row: DeliveryRow }) {
+function InFlightRow({ row, onReassigned }: { row: DeliveryRow; onReassigned: () => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [reassigning, setReassigning] = useState(false);
+  const [justReassigned, setJustReassigned] = useState(false);
+
+  // Reassign is offered exactly once, and only before the driver has set off
+  // (past "assigned" the server refuses it anyway). Once the booking reads
+  // "delivery-reassigned" that turn has been used, so the row shows only its
+  // status from then on — previously the button stayed clickable forever,
+  // letting the same leg be reassigned over and over.
+  const canReassign =
+    row.status === "assigned" &&
+    !!row.staff &&
+    !justReassigned &&
+    row.booking?.status !== BOOKING_STATUS.RETURN_REASSIGNED;
+
+  const reassign = async () => {
+    if (!row.staff) return;
+    setReassigning(true);
+    try {
+      await api.patch(`/deliveries/${row._id}/reassign`, { staffId: row.staff._id });
+      toast.success(row.leg === "return" ? "Delivery reassigned" : "Reassigned");
+      // Latch immediately: the refetch confirms it via booking.status, but
+      // until it lands the button must not accept a second click.
+      setJustReassigned(true);
+      onReassigned();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to reassign"));
+      setReassigning(false);
+    }
+  };
+
   return (
     <div>
       <div className="ap-row">
         <div className="ap-row-main">
           <span className="ap-row-title">
-            {row.leg === "pickup" ? "Pickup" : "Return"} — {row.booking.vehicle?.plateNumber} — {row.workshop.name}
+            {row.leg === "pickup" ? "Pickup" : "Return"} — {row.booking?.vehicle?.plateNumber ?? "Unknown vehicle"} — {row.workshop?.name ?? "Unknown workshop"}
           </span>
           <span className="ap-row-sub">
             {row.staff ? `${row.staff.firstname} ${row.staff.lastname}` : "Unassigned"} · {row.area}
-            {row.booking.deliveryFee != null &&
+            {row.booking?.deliveryFee != null &&
               ` · ${row.booking.distanceKm?.toFixed(1) ?? "?"} km · Rs ${(row.booking.deliveryFee / 100).toFixed(2)} round-trip delivery fee`}
           </span>
         </div>
         <div className="ap-row-actions">
-          <span className="uh-badge uh-badge-blue">{row.status}</span>
+          <span className="uh-badge uh-badge-blue">{legStatusLabel(row.leg, row.status)}</span>
+          {canReassign && (
+            <button className="uh-btn uh-btn-sm uh-btn-ghost" onClick={reassign} disabled={reassigning}>
+              {reassigning ? "Reassigning..." : "Reassign"}
+            </button>
+          )}
           {EN_ROUTE.includes(row.status) && (
             <button className="uh-btn uh-btn-sm uh-btn-ghost" onClick={() => setExpanded((v) => !v)}>
               {expanded ? "Hide map" : "Show map"}
@@ -220,7 +290,7 @@ function AdminDeliveriesPage() {
           ) : (
             <div className="uh-list">
               {inFlight.map((row) => (
-                <InFlightRow key={row._id} row={row} />
+                <InFlightRow key={row._id} row={row} onReassigned={load} />
               ))}
             </div>
           )}

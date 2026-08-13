@@ -60,6 +60,14 @@ const UserSchema = new mongoose.Schema({
     average: { type: Number, default: 0 },
     count: { type: Number, default: 0 },
   },
+  // Aggregate delivery-staff sentiment, mirroring Workshop.sentiment's pattern —
+  // always fully recomputed by recalculateStaffAggregates, never incremented.
+  // Only meaningful when role is "delivery-staff".
+  deliverySentiment: {
+    score: { type: Number, default: 0 }, // -1 to +1 weighted sentiment score
+    positiveRatio: { type: Number, default: 0 }, // proportion of positive reviews
+    scoredCount: { type: Number, default: 0 }, // number of reviews with sentiment scored
+  },
   // Ambient location, updated opportunistically any time this staff member's
   // client pushes a location point — whether or not a Delivery leg is
   // currently en route. Distinct from DeliveryLocationHistory (booking-scoped,

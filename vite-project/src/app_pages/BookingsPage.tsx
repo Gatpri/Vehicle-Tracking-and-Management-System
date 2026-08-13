@@ -6,6 +6,13 @@ import PartsQuotePanel from "../components/PartsQuotePanel";
 import LiveDeliveryMap from "../components/LiveDeliveryMap";
 import DeliveryStaffReviewForm from "../components/DeliveryStaffReviewForm";
 import { redirectToEsewa } from "../lib/esewa";
+import {
+  BOOKING_STATUS,
+  customerStatusLabel,
+  legStatusLabel,
+  canTrackDelivery,
+  canSeePartsEstimate,
+} from "../lib/bookingWorkflow";
 
 // Kept in sync with the backend's EN_ROUTE_STATUSES (deliveryController.js,
 // deliveryHandlers.js) — every status where a live map has something to show.
@@ -59,7 +66,7 @@ function DeliveryTrackingPanel({ bookingId }: { bookingId: string }) {
       {deliveries.map((d) => (
         <div key={d._id} style={{ marginBottom: 12 }}>
           <p style={{ fontSize: 13, marginBottom: 6 }}>
-            <strong>{d.leg === "pickup" ? "Pickup" : "Return"}</strong> — {d.status}
+            <strong>{d.leg === "pickup" ? "Pickup" : "Return"}</strong> — {legStatusLabel(d.leg, d.status)}
             {d.staff && ` · ${d.staff.firstname} ${d.staff.lastname}`}
           </p>
           {EN_ROUTE_STATUSES.includes(d.status) && (
@@ -83,7 +90,9 @@ interface Booking {
   vehicle: { _id: string; plateNumber: string; make: string; model: string };
   workshop: { _id: string; name: string };
   serviceType: string;
-  status: "pending" | "accepted" | "in_progress" | "completed" | "cancelled";
+  // One of BOOKING_STATUS (lib/bookingWorkflow.ts) — left as a plain string
+  // so adding a workflow step doesn't mean editing a union in every file.
+  status: string;
   finalPrice: number | null;
   // One combined round-trip delivery fee (covers pickup AND return, paid
   // once, to a single staff member who does both legs) — null if no
@@ -127,7 +136,7 @@ function BookingsPage() {
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   // Which booking's delivery-tracking panel is expanded.
   const [openDeliveryId, setOpenDeliveryId] = useState<string | null>(null);
-  const [requestingReturnId, setRequestingReturnId] = useState<string | null>(null);
+  const [requestingPickupId, setRequestingPickupId] = useState<string | null>(null);
 
   // Balance is fetched so the choice can say whether the wallet actually
   // covers the bill, rather than letting the user pick it and be refused.
@@ -216,18 +225,20 @@ function BookingsPage() {
     }
   };
 
-  // Free once requested — deliveryFee already covers the whole round trip,
-  // paid as part of the main booking payment. Nothing further to charge.
-  const requestReturnDelivery = async (id: string) => {
-    setRequestingReturnId(id);
+  // Step 2: the customer calls for the pickup once the workshop has accepted.
+  // The return leg needs no equivalent — choosing delivery at booking time
+  // covers the whole round trip, and the booking flows back out automatically
+  // once payment clears.
+  const requestPickup = async (id: string) => {
+    setRequestingPickupId(id);
     try {
-      await api.patch(`/bookings/${id}/request-return-delivery`);
-      toast.success("Return delivery requested — an admin will assign a staff member soon");
+      await api.patch(`/bookings/${id}/request-delivery`);
+      toast.success("Pickup requested — a delivery admin will assign a staff member soon");
       load(statusFilter || undefined);
     } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to request return delivery"));
+      toast.error(getErrorMessage(err, "Failed to request pickup"));
     } finally {
-      setRequestingReturnId(null);
+      setRequestingPickupId(null);
     }
   };
 
@@ -264,10 +275,11 @@ function BookingsPage() {
                   </span>
                 </div>
                 <div className="ap-row-actions">
-                  <span className={statusBadge(b.status)}>{b.status}</span>
-                  {/* A quote can arrive at any point once work is under way, so
-                      the panel is opened per booking rather than shown always. */}
-                  {b.status !== "cancelled" && (
+                  <span className={statusBadge(b.status)}>{customerStatusLabel(b.status)}</span>
+                  {/* Only once the workshop has actually started work (step 7)
+                      — for a delivery booking that's after the vehicle has been
+                      dropped off, so there's nothing to quote on before then. */}
+                  {canSeePartsEstimate(b) && (
                     <button
                       className="uh-btn uh-btn-sm uh-btn-ghost"
                       onClick={() => setOpenQuoteId(openQuoteId === b._id ? null : b._id)}
@@ -275,10 +287,24 @@ function BookingsPage() {
                       {openQuoteId === b._id ? "Hide estimate" : "Parts estimate"}
                     </button>
                   )}
-                  {b.status === "pending" && (
+                  {b.status === BOOKING_STATUS.PENDING && (
                     <button className="uh-btn uh-btn-sm uh-btn-ghost" onClick={() => handleCancel(b._id)}>Cancel</button>
                   )}
-                  {b.status === "completed" && b.paymentStatus === "unpaid" && (
+                  {/* Step 2: the workshop has accepted, so a delivery booking's
+                      customer can now call for the pickup. Self-drop-off
+                      bookings never see this — they take the vehicle in
+                      themselves. */}
+                  {b.status === BOOKING_STATUS.ACCEPTED && b.deliveryRequested && (
+                    <button
+                      className="uh-btn uh-btn-sm uh-btn-orange"
+                      onClick={() => requestPickup(b._id)}
+                      disabled={requestingPickupId === b._id}
+                    >
+                      {requestingPickupId === b._id ? "Requesting..." : "Request pickup"}
+                    </button>
+                  )}
+                  {/* Step 10: only once the workshop has actually asked. */}
+                  {b.status === BOOKING_STATUS.PAYMENT_PENDING && b.paymentStatus === "unpaid" && (
                     <button
                       className="uh-btn uh-btn-sm uh-btn-orange"
                       onClick={() => setPayChoiceId(payChoiceId === b._id ? null : b._id)}
@@ -288,31 +314,18 @@ function BookingsPage() {
                     </button>
                   )}
                   {b.paymentStatus === "paid" && <span className="uh-badge uh-badge-green">paid</span>}
-                  {/* Only ever shown for a booking the customer actually
-                      requested delivery for — self-pickup bookings have
-                      nothing to track. */}
-                  {(b.deliveryRequested || b.returnDeliveryRequested) &&
-                    (b.status === "accepted" || b.status === "in_progress" || b.status === "completed") && (
-                      <button
-                        className="uh-btn uh-btn-sm uh-btn-ghost"
-                        onClick={() => setOpenDeliveryId(openDeliveryId === b._id ? null : b._id)}
-                      >
-                        {openDeliveryId === b._id ? "Hide delivery" : "Track delivery"}
-                      </button>
-                    )}
-                  {/* Return delivery is only offerable once the main booking is
-                      settled — a separate opt-in, never automatic, and free:
-                      deliveryFee already covers the whole round trip. */}
-                  {b.status === "completed" && b.paymentStatus === "paid" && !b.returnDeliveryRequested && (
+                  {/* Tracking exists only for bookings that opted into delivery
+                      at creation. The return leg is part of the same flow now —
+                      there is no separate "request return delivery" step, since
+                      choosing delivery at booking covers the whole round trip. */}
+                  {canTrackDelivery(b) && (
                     <button
                       className="uh-btn uh-btn-sm uh-btn-ghost"
-                      onClick={() => requestReturnDelivery(b._id)}
-                      disabled={requestingReturnId === b._id}
+                      onClick={() => setOpenDeliveryId(openDeliveryId === b._id ? null : b._id)}
                     >
-                      {requestingReturnId === b._id ? "Requesting..." : "Request return delivery"}
+                      {openDeliveryId === b._id ? "Hide delivery" : "Track delivery"}
                     </button>
                   )}
-                  {b.returnDeliveryRequested && <span className="uh-badge uh-badge-slate">return delivery requested</span>}
                 </div>
               </div>
 

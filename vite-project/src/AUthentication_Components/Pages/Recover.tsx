@@ -17,7 +17,7 @@ function Recover() {
     e.preventDefault();
     setLoading(true);
     try {
-      const result = await axios.post("http://localhost:3000/send-otp", { email });
+      const result = await axios.post("/api/send-otp", { email });
       if (result.data.success) {
         toast.success("OTP sent to your email!");
         setStep("otp"); // move to OTP input step
@@ -35,10 +35,12 @@ function Recover() {
     e.preventDefault();
     setLoading(true);
     try {
-      const result = await axios.post("http://localhost:3000/verify-otp", { email, otp });
+      const result = await axios.post("/api/verify-otp", { email, otp });
       if (result.data.success) {
         toast.success("OTP verified!");
-        navigate("/reset-password", { state: { email } }); // pass email to reset page
+        // resetToken is the proof the OTP was actually verified — /reset-password
+        // rejects the request without it.
+        navigate("/reset-password", { state: { email, resetToken: result.data.resetToken } });
       } else {
         toast.error(result.data.message);
       }

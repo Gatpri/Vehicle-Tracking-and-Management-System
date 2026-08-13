@@ -7,11 +7,12 @@ import {
   getBooking,
   acceptBooking,
   startBooking,
+  requestPayment,
   completeBooking,
+  requestPickupDelivery,
   cancelBooking,
   getVehicleServiceHistory,
   getBookingPayment,
-  requestReturnDelivery,
 } from "../controllers/bookingController.js";
 
 const router = express.Router();
@@ -25,9 +26,14 @@ router.get("/bookings", verifyToken, requirePermission("booking:read:any"), list
 router.get("/bookings/:id/payment", verifyToken, getBookingPayment);
 router.get("/bookings/:id", verifyToken, getBooking);
 router.patch("/bookings/:id/accept", verifyToken, requirePermission("booking:manage"), acceptBooking);
+// Step 2 — the customer asks for the pickup leg (delivery bookings only).
+router.patch("/bookings/:id/request-delivery", verifyToken, requestPickupDelivery);
+// Step 7 — workshop starts the service once the vehicle is on site.
 router.patch("/bookings/:id/start", verifyToken, requirePermission("booking:manage"), startBooking);
+// Step 9 — workshop closes the estimate and asks for payment.
+router.patch("/bookings/:id/request-payment", verifyToken, requirePermission("booking:manage"), requestPayment);
+// Signs the finished job off once paid; releases a delivery booking's return leg.
 router.patch("/bookings/:id/complete", verifyToken, requirePermission("booking:manage"), completeBooking);
 router.patch("/bookings/:id/cancel", verifyToken, cancelBooking);
-router.patch("/bookings/:id/request-return-delivery", verifyToken, requestReturnDelivery);
 
 export default router;

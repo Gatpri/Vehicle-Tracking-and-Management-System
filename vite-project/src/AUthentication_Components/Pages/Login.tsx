@@ -19,7 +19,7 @@ function Login() {
     e.preventDefault();
 
     try {
-      const result = await axios.post("http://localhost:3000/login", {
+      const result = await axios.post("/api/login", {
         email,
         password,
       });
@@ -57,7 +57,7 @@ if (result.data.success) {
       googleProvider.setCustomParameters({ prompt: "select_account" });
       const result = await signInWithPopup(auth, googleProvider);
       const idToken = await result.user.getIdToken();
-      const response = await axios.post("http://localhost:3000/google-auth", { idToken });
+      const response = await axios.post("/api/google-auth", { idToken });
       if (response.data.success) {
         localStorage.setItem("user", JSON.stringify(response.data.user));
         localStorage.setItem("token", response.data.token);

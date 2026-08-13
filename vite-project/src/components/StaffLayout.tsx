@@ -23,6 +23,9 @@ function StaffLayout({ children }: { children: ReactNode }) {
           </NavLink>
 
           <nav className="al-links">
+            <NavLink to="/home" className={({ isActive }) => `al-link ${isActive ? "active" : ""}`}>
+              Home
+            </NavLink>
             <NavLink to="/wallet" className={({ isActive }) => `al-link ${isActive ? "active" : ""}`}>
               My Earnings
             </NavLink>

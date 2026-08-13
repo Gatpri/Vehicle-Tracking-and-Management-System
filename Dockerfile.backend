@@ -1,0 +1,28 @@
+# Backend API Service Dockerfile
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY vite-project/package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy backend code
+COPY vite-project/backend_api ./backend_api
+
+# No .env is baked into the image: docker-compose injects every value via
+# `environment:`, and backend_api/env.js treats real env vars as
+# authoritative. Keeping secrets out of the image is also why .dockerignore
+# excludes the root .env.
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+
+# Start backend
+CMD ["node", "backend_api/index.js"]

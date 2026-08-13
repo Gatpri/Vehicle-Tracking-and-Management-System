@@ -1,9 +1,6 @@
 import mongoose from "mongoose";
 
-
-
-
-const url = "mongodb://admin:password123@localhost:27017/myDatabase?authSource=admin";
+const url = process.env.MONGODB_URI || "mongodb://admin:password123@localhost:27017/myDatabase?authSource=admin";
 
 
 export const connectDB = async () => {

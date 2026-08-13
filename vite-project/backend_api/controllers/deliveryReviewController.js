@@ -2,19 +2,44 @@ import DeliveryStaffReview from "../models/DeliveryStaffReview.js";
 import Delivery from "../models/Delivery.js";
 import ServiceRequest from "../models/ServiceRequest.js";
 import User from "../models/User.js";
+import { analyzeSentiment } from "../services/sentimentService.js";
 
 const REVIEWABLE_STATUS_BY_LEG = { pickup: "at_workshop", return: "delivered" };
 
 // Always fully recomputed — same discipline as recalculateWorkshopAggregates.
 export const recalculateStaffAggregates = async (staffId) => {
-  const [agg] = await DeliveryStaffReview.aggregate([
+  const [ratingAgg] = await DeliveryStaffReview.aggregate([
     { $match: { staff: staffId } },
     { $group: { _id: null, average: { $avg: "$rating" }, count: { $sum: 1 } } },
   ]);
+
+  // Calculate sentiment aggregates for delivery staff reviews
+  const [sentimentAgg] = await DeliveryStaffReview.aggregate([
+    { $match: { staff: staffId, "sentiment.label": { $in: ["positive", "neutral", "negative"] } } },
+    {
+      $group: {
+        _id: null,
+        weightedSum: { $sum: { $multiply: ["$sentiment.score", { $ifNull: ["$sentiment.confidence", 1] }] } },
+        weightTotal: { $sum: { $ifNull: ["$sentiment.confidence", 1] } },
+        positives: { $sum: { $cond: [{ $eq: ["$sentiment.label", "positive"] }, 1, 0] } },
+        scoredCount: { $sum: 1 },
+      },
+    },
+  ]);
+
   await User.findByIdAndUpdate(staffId, {
     deliveryRating: {
-      average: agg?.average ? Number(agg.average.toFixed(2)) : 0,
-      count: agg?.count ?? 0,
+      average: ratingAgg?.average ? Number(ratingAgg.average.toFixed(2)) : 0,
+      count: ratingAgg?.count ?? 0,
+    },
+    deliverySentiment: {
+      score: sentimentAgg?.weightTotal
+        ? Number((sentimentAgg.weightedSum / sentimentAgg.weightTotal).toFixed(4))
+        : 0,
+      positiveRatio: sentimentAgg?.scoredCount
+        ? Number((sentimentAgg.positives / sentimentAgg.scoredCount).toFixed(4))
+        : 0,
+      scoredCount: sentimentAgg?.scoredCount ?? 0,
     },
   });
 };
@@ -50,6 +75,9 @@ export const createDeliveryStaffReview = async (req, res) => {
     const existing = await DeliveryStaffReview.findOne({ delivery: deliveryId });
     if (existing) return res.status(409).json({ success: false, message: "You've already reviewed this leg" });
 
+    // Analyze sentiment for the review text
+    const sentiment = await analyzeSentiment(text);
+
     const review = await DeliveryStaffReview.create({
       staff: delivery.staff,
       user: req.user._id,
@@ -57,6 +85,7 @@ export const createDeliveryStaffReview = async (req, res) => {
       delivery: deliveryId,
       rating,
       text: text ?? "",
+      ...(sentiment && { sentiment }),
     });
 
     await recalculateStaffAggregates(delivery.staff);

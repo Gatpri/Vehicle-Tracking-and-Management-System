@@ -21,12 +21,6 @@ const IconNavigation = () => (
     <polygon points="3 11 22 2 13 21 11 13 3 11" />
   </svg>
 );
-const IconCamera = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
-    <circle cx="12" cy="13" r="3.2" />
-  </svg>
-);
 const IconScan = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 7V5a2 2 0 0 1 2-2h2" />
@@ -41,13 +35,6 @@ const IconStore = () => (
     <path d="M3 9l1.2-5h15.6L21 9" />
     <path d="M4 9v10a1 1 0 0 0 1 1h4v-6h6v6h4a1 1 0 0 0 1-1V9" />
     <path d="M3 9h18" />
-  </svg>
-);
-const IconShieldAlert = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    <line x1="12" y1="8" x2="12" y2="13" />
-    <line x1="12" y1="16.5" x2="12" y2="16.51" />
   </svg>
 );
 const IconChat = () => (
@@ -102,15 +89,13 @@ const IconCheck = () => (
 );
 
 const features = [
-  { icon: <IconWrench />, title: "Service & Repair Booking", desc: "Schedule maintenance or repairs with trusted workshops in just a few taps, and track every job to completion." },
-  { icon: <IconNavigation />, title: "Real-Time Vehicle Tracking", desc: "Know exactly where your vehicle is at all times with live location updates on an interactive map." },
-  { icon: <IconCamera />, title: "Live CCTV Detection", desc: "Our connected camera network scans traffic in real time to spot your vehicle automatically." },
-  { icon: <IconScan />, title: "AI Plate Recognition", desc: "Advanced number-plate recognition flags lost or stolen vehicles the moment they're seen." },
-  { icon: <IconStore />, title: "Smart Workshop Matching", desc: "Get personalized workshop recommendations based on distance, ratings, and pricing history." },
-  { icon: <IconShieldAlert />, title: "Overpricing Alerts", desc: "AI compares quotes against market rates and warns you before you overpay for a service." },
-  { icon: <IconChat />, title: "Direct Chat Support", desc: "Message your workshop or an admin directly and keep every conversation in one place." },
-  { icon: <IconWallet />, title: "Digital Wallet", desc: "Pay for services securely from an in-app wallet — no cash, no card details shared." },
-  { icon: <IconSiren />, title: "Emergency SOS", desc: "One tap alerts nearby help and shares your live location during a breakdown or emergency." },
+  { icon: <IconWrench />, title: "Service & Repair Booking", desc: "Schedule maintenance or repairs with trusted workshops in just a few taps, and track every job to completion.", to: "/bookings" },
+  { icon: <IconNavigation />, title: "Real-Time Vehicle Tracking", desc: "Know exactly where your vehicle is at all times with live location updates on an interactive map.", to: "/vehicles" },
+  { icon: <IconScan />, title: "AI Plate Recognition", desc: "Advanced number-plate recognition flags lost or stolen vehicles the moment they're seen.", to: "/safety" },
+  { icon: <IconStore />, title: "Smart Workshop Matching", desc: "Get personalized workshop recommendations based on distance, ratings, and pricing history.", to: "/workshops" },
+  { icon: <IconChat />, title: "Direct Chat Support", desc: "Message your workshop or an admin directly and keep every conversation in one place.", to: "/chat" },
+  { icon: <IconWallet />, title: "Digital Wallet", desc: "Pay for services securely from an in-app wallet — no cash, no card details shared.", to: "/wallet" },
+  { icon: <IconSiren />, title: "Emergency SOS", desc: "One tap alerts nearby help and shares your live location during a breakdown or emergency.", to: "/sos" },
 ];
 
 const steps = [
@@ -155,10 +140,12 @@ function Home() {
           </div>
 
           <nav className={`uh-links ${menuOpen ? "open" : ""}`}>
-            <Link to="/vehicles" onClick={() => setMenuOpen(false)}>Vehicles</Link>
+            <Link to="/vehicles" onClick={() => setMenuOpen(false)}>Register Vehicles</Link>
             <Link to="/bookings" onClick={() => setMenuOpen(false)}>Bookings</Link>
+            <Link to="/workshops" onClick={() => setMenuOpen(false)}>Workshops</Link>
             <Link to="/wallet" onClick={() => setMenuOpen(false)}>Wallet</Link>
             <Link to="/chat" onClick={() => setMenuOpen(false)}>Chat</Link>
+            <Link to="/safety" onClick={() => setMenuOpen(false)}>Safety</Link>
             <Link to="/sos" onClick={() => setMenuOpen(false)} style={{ color: "var(--orange-500)", fontWeight: 700 }}>SOS</Link>
 
             <div className="uh-links-mobile-user">
@@ -243,11 +230,11 @@ function Home() {
         </div>
         <div className="uh-grid">
           {features.map((f) => (
-            <div className="uh-card" key={f.title}>
+            <Link className="uh-card" key={f.title} to={f.to}>
               <div className="uh-card-icon">{f.icon}</div>
               <h3>{f.title}</h3>
               <p>{f.desc}</p>
-            </div>
+            </Link>
           ))}
         </div>
       </section>

@@ -10,21 +10,26 @@ function ResetPassword() {
   const location = useLocation();
   const navigate = useNavigate();
   const email = location.state?.email; // ← received from Recover page
+  const resetToken = location.state?.resetToken; // proof the OTP was verified
 
   const handleReset = async (e: FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) return toast.error("Passwords do not match");
+    if (newPassword.length < 8) return toast.error("Password must be at least 8 characters long");
+    if (!email || !resetToken) {
+      return toast.error("Your reset session expired. Please start again.");
+    }
 
     try {
-      const result = await axios.post("http://localhost:3000/reset-password", { email, newPassword });
+      const result = await axios.post("/api/reset-password", { email, newPassword, resetToken });
       if (result.data.success) {
         toast.success("Password reset successful!");
-        navigate("/");
+        navigate("/login");
       } else {
         toast.error(result.data.message);
       }
-    } catch (err) {
-      toast.error("Something went wrong");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Something went wrong");
     }
   };
 

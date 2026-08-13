@@ -4,11 +4,10 @@ ultralytics
 opencv-python
 torch
 
-# Review sentiment analysis. See download_sentiment_models.py for which models
-# to fetch and benchmark_sentiment_models.py for how they were chosen.
-transformers
-huggingface_hub
-datasets
-# 3.0.2 ships a binary that segfaults on import on Python 3.14, and because
-# transformers pulls it in via jinja2 the crash looks like a transformers bug.
-markupsafe>=3.0.3
+# Reads the consolidated .env at the repo root (see server.py).
+python-dotenv>=1.0.0
+
+# Review sentiment analysis: Gemini Flash 2.5 primary, Mistral fallback. See
+# llm_sentiment.py.
+google-generativeai>=0.8.0
+mistralai>=1.1.0

@@ -8,6 +8,9 @@ import { getIO } from "../config/socket.js";
 import { notify } from "../services/notificationService.js";
 import { deliveryFeeFor, distanceForDelivery } from "../services/deliveryPricingService.js";
 import { settleDeliveryFee } from "../services/ledgerService.js";
+import { moveBookingTo } from "../services/bookingStatusService.js";
+import { BOOKING_STATUS, InvalidTransitionError, canTransition } from "../constants/bookingWorkflow.js";
+import { sameRegion, regionQuery } from "../utils/region.js";
 
 const PICKUP_LEG_TRANSITIONS = {
   assigned: ["en_route_to_pickup"],
@@ -28,6 +31,44 @@ const EN_ROUTE_STATUSES = ["en_route_to_pickup", "en_route_to_workshop", "en_rou
 
 const transitionsFor = (leg) => (leg === "pickup" ? PICKUP_LEG_TRANSITIONS : RETURN_LEG_TRANSITIONS);
 
+
+// Each driver-facing delivery status drives the customer/workshop-facing
+// booking status, so the two can never disagree — the old code tracked them
+// independently, which let a workshop mark a job started while the vehicle
+// was still in the van.
+const PICKUP_LEG_TO_BOOKING = {
+  en_route_to_pickup: BOOKING_STATUS.OUT_FOR_DELIVERY,
+  picked_up: BOOKING_STATUS.PICKED_UP,
+  at_workshop: BOOKING_STATUS.DROPPED,
+};
+// The return leg reports the vehicle leaving the workshop, then arriving with
+// the customer. "assigned -> en_route_to_dropoff" is the driver collecting it,
+// which is what the customer sees as "Picked from workshop".
+const RETURN_LEG_TO_BOOKING = {
+  en_route_to_dropoff: BOOKING_STATUS.RETURN_PICKED_FROM_WORKSHOP,
+  delivered: BOOKING_STATUS.DELIVERED,
+};
+
+// Legs where the staff member is still committed to this job and therefore
+// unavailable for another. "at_workshop"/"delivered" release them.
+const ACTIVE_DELIVERY_STATUSES = [
+  "assigned",
+  "en_route_to_pickup",
+  "picked_up",
+  "en_route_to_workshop",
+  "en_route_to_dropoff",
+];
+
+// A staff member may hold at most one live leg at a time. Without this the
+// same person could be assigned to unlimited concurrent bookings — there was
+// no availability check anywhere before.
+const findActiveDeliveryForStaff = (staffId, excludeDeliveryId = null) =>
+  Delivery.findOne({
+    staff: staffId,
+    status: { $in: ACTIVE_DELIVERY_STATUSES },
+    ...(excludeDeliveryId ? { _id: { $ne: excludeDeliveryId } } : {}),
+  });
+
 // Bookings ready for a pickup-leg or return-leg assignment: accepted bookings
 // that requested pickup delivery with no pickup Delivery yet, and
 // completed+paid bookings that separately requested return delivery with no
@@ -45,18 +86,20 @@ export const listAssignableBookings = async (req, res) => {
     if (req.user.role === "delivery-admin") region = req.user.region;
 
     const workshopFilter = {};
-    if (area) workshopFilter.area = area;
-    if (region) workshopFilter.region = region;
+    if (area) workshopFilter.area = regionQuery(area);
+    if (region) workshopFilter.region = regionQuery(region);
     const workshops = await Workshop.find(workshopFilter).select("_id name area region location");
     const workshopIds = workshops.map((w) => w._id);
     const workshopById = new Map(workshops.map((w) => [String(w._id), w]));
 
+    // A booking is assignable exactly when it's sitting in the status that
+    // waits for an assignment: delivery-requested for the pickup leg (the
+    // customer has asked), completed for the return leg (paid and the workshop
+    // has signed the work off, so the vehicle is free to go back).
     const candidates = await ServiceRequest.find({
       workshop: { $in: workshopIds },
-      $or: [
-        { status: "accepted", deliveryRequested: true },
-        { status: "completed", paymentStatus: "paid", returnDeliveryRequested: true },
-      ],
+      status: { $in: [BOOKING_STATUS.DELIVERY_REQUESTED, BOOKING_STATUS.COMPLETED] },
+      deliveryRequested: true,
     })
       .populate("vehicle", "plateNumber make model")
       .populate("user", "firstname lastname email")
@@ -74,13 +117,8 @@ export const listAssignableBookings = async (req, res) => {
       .map((booking) => {
         const legs = existingLegs.get(String(booking._id)) || new Set();
         let leg = null;
-        if (booking.status === "accepted" && booking.deliveryRequested && !legs.has("pickup")) leg = "pickup";
-        else if (
-          booking.status === "completed" &&
-          booking.paymentStatus === "paid" &&
-          booking.returnDeliveryRequested &&
-          !legs.has("return")
-        ) leg = "return";
+        if (booking.status === BOOKING_STATUS.DELIVERY_REQUESTED && !legs.has("pickup")) leg = "pickup";
+        else if (booking.status === BOOKING_STATUS.COMPLETED && !legs.has("return")) leg = "return";
         if (!leg) return null;
         return {
           booking,
@@ -103,12 +141,26 @@ export const listStaffByArea = async (req, res) => {
     if (req.user.role === "delivery-admin") region = req.user.region;
 
     const filter = { role: "delivery-staff" };
-    if (area) filter.area = area;
-    if (region) filter.region = region;
-    const staff = await User.find(filter).select("firstname lastname email area region");
-    res.json({ success: true, staff });
+    if (area) filter.area = regionQuery(area);
+    if (region) filter.region = regionQuery(region);
+    const staff = await User.find(filter).select("firstname lastname email area region").lean();
+
+    // Whoever is mid-delivery can't take another job (assignDelivery refuses
+    // it), so say so here rather than letting an admin pick someone and only
+    // then be told no.
+    const activeLegs = await Delivery.find({
+      staff: { $in: staff.map((s) => s._id) },
+      status: { $in: ACTIVE_DELIVERY_STATUSES },
+    }).select("staff");
+    const busyIds = new Set(activeLegs.map((d) => String(d.staff)));
+
+    res.json({
+      success: true,
+      staff: staff.map((s) => ({ ...s, busy: busyIds.has(String(s._id)) })),
+    });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error(err);
+    res.status(500).json({ success: false, message: "Something went wrong" });
   }
 };
 
@@ -122,16 +174,18 @@ export const assignDelivery = async (req, res) => {
     const booking = await ServiceRequest.findById(bookingId);
     if (!booking) return res.status(404).json({ success: false, message: "Booking not found" });
 
-    if (leg === "pickup" && booking.status !== "accepted") {
-      return res.status(400).json({ success: false, message: "Booking must be accepted before assigning a pickup" });
-    }
-    if (
-      leg === "return" &&
-      !(booking.status === "completed" && booking.paymentStatus === "paid" && booking.returnDeliveryRequested)
-    ) {
-      return res.status(400).json({
+    // Each leg is assignable from exactly one booking status, so the workflow
+    // itself is the gate — no separate combination of flags to keep in sync.
+    if (leg === "pickup" && booking.status !== BOOKING_STATUS.DELIVERY_REQUESTED) {
+      return res.status(409).json({
         success: false,
-        message: "Booking must be completed, paid, and the customer must have requested return delivery before assigning a return",
+        message: "The customer hasn't requested pickup for this booking yet",
+      });
+    }
+    if (leg === "return" && booking.status !== BOOKING_STATUS.COMPLETED) {
+      return res.status(409).json({
+        success: false,
+        message: "This booking isn't ready for return delivery yet",
       });
     }
     if (!booking.pickupLocation?.lat || !booking.pickupLocation?.lng) {
@@ -164,7 +218,7 @@ export const assignDelivery = async (req, res) => {
     // delivery:manage would otherwise let them act on any workshop — the
     // permission grants the capability, this narrows the scope, same
     // discipline as isWorkshopScoped narrows workshop-admin.
-    if (req.user.role === "delivery-admin" && workshop.region !== req.user.region) {
+    if (req.user.role === "delivery-admin" && !sameRegion(workshop.region, req.user.region)) {
       return res.status(403).json({ success: false, message: "Outside your region" });
     }
 
@@ -172,13 +226,23 @@ export const assignDelivery = async (req, res) => {
     if (!staff || staff.role !== "delivery-staff") {
       return res.status(400).json({ success: false, message: "Staff member not found or not a delivery-staff account" });
     }
-    if (workshop.region && staff.region !== workshop.region) {
+    if (workshop.region && !sameRegion(staff.region, workshop.region)) {
       return res.status(400).json({ success: false, message: "Staff member's region does not match the workshop's region" });
     }
 
     let delivery = await Delivery.findOne({ booking: bookingId, leg });
     if (delivery && !["unassigned", "assigned"].includes(delivery.status)) {
       return res.status(400).json({ success: false, message: `This ${leg} leg is already ${delivery.status}` });
+    }
+
+    // Someone mid-delivery can't take a second job — they and the vehicle are
+    // physically committed until they drop off.
+    const busyOn = await findActiveDeliveryForStaff(staff._id, delivery?._id);
+    if (busyOn) {
+      return res.status(409).json({
+        success: false,
+        message: `${staff.firstname} ${staff.lastname} is already on another delivery`,
+      });
     }
 
     if (!delivery) {
@@ -214,6 +278,13 @@ export const assignDelivery = async (req, res) => {
     // yet (this is the pickup leg, assigned before payment), this no-ops —
     // settleBookingPayment will pay it out itself once payment happens.
     await settleDeliveryFee(delivery, booking);
+
+    // Assigning a leg moves the booking itself along, so both the customer and
+    // the workshop see that a driver is now on it.
+    await moveBookingTo(
+      booking,
+      leg === "pickup" ? BOOKING_STATUS.DELIVERY_ASSIGNED : BOOKING_STATUS.RETURN_ASSIGNED,
+    );
 
     getIO().to(`user:${booking.user}`).emit("delivery:assigned", delivery);
     getIO().to(`user:${delivery.staff}`).emit("delivery:assigned", delivery);
@@ -251,21 +322,38 @@ export const reassignDelivery = async (req, res) => {
       return res.status(400).json({ success: false, message: "Can only reassign before a leg is under way" });
     }
 
-    // Same round-trip, same staff member — a return leg can't be reassigned
-    // away from whoever did the pickup leg (mirrors the check in
-    // assignDelivery).
-    if (delivery.leg === "return") {
-      const pickupLeg = await Delivery.findOne({ booking: delivery.booking, leg: "pickup" });
-      if (pickupLeg?.staff && String(pickupLeg.staff) !== String(staffId)) {
-        return res.status(400).json({
-          success: false,
-          message: "Return delivery must go to the same staff member who did the pickup",
-        });
-      }
+    // One reassignment per leg. The booking reaching "delivery-reassigned" is
+    // the record that the turn has been used — without this the endpoint
+    // accepted the same call indefinitely, and hiding the button only stopped
+    // the honest path.
+    const existingBooking = await ServiceRequest.findById(delivery.booking).select("status");
+    if (existingBooking?.status === BOOKING_STATUS.RETURN_REASSIGNED) {
+      return res.status(409).json({
+        success: false,
+        message: "This delivery has already been reassigned once",
+      });
+    }
+
+    // Same round-trip, same staff member. The whole delivery fee is paid once
+    // to a single person (settleDeliveryFee), so a return leg can never move
+    // to a different driver — reassigning here re-confirms the original one
+    // rather than swapping them out.
+    //
+    // Checked against THIS delivery's own current staff, not the sibling
+    // pickup leg — a booking fast-tracked straight to "completed" (e.g. no
+    // delivery ever requested for pickup, only for return) has no pickup leg
+    // to compare against at all, and comparing against a leg that may not
+    // exist let a genuine staff swap through undetected.
+    if (delivery.leg === "return" && delivery.staff && String(delivery.staff) !== String(staffId)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "The return leg belongs to the driver who did the pickup — reassign confirms them, it can't swap in someone else",
+      });
     }
 
     const workshop = await Workshop.findById(delivery.workshop);
-    if (req.user.role === "delivery-admin" && workshop?.region !== req.user.region) {
+    if (req.user.role === "delivery-admin" && !sameRegion(workshop?.region, req.user.region)) {
       return res.status(403).json({ success: false, message: "Outside your region" });
     }
 
@@ -273,7 +361,7 @@ export const reassignDelivery = async (req, res) => {
     if (!staff || staff.role !== "delivery-staff") {
       return res.status(400).json({ success: false, message: "Staff member not found or not a delivery-staff account" });
     }
-    if (workshop?.region && staff.region !== workshop.region) {
+    if (workshop?.region && !sameRegion(staff.region, workshop.region)) {
       return res.status(400).json({ success: false, message: "Staff member's region does not match the workshop's region" });
     }
 
@@ -282,7 +370,16 @@ export const reassignDelivery = async (req, res) => {
     delivery.assignedAt = new Date();
     await delivery.save();
 
-    const booking = await ServiceRequest.findById(delivery.booking).select("user");
+    const booking = await ServiceRequest.findById(delivery.booking);
+
+    // A return-leg reassignment is visible on the booking itself, so the
+    // customer and workshop can see the handover rather than the driver
+    // silently changing underneath them. The pickup leg has no equivalent
+    // status — it's still simply "delivery assigned" either way.
+    if (delivery.leg === "return" && booking && canTransition(booking, BOOKING_STATUS.RETURN_REASSIGNED)) {
+      await moveBookingTo(booking, BOOKING_STATUS.RETURN_REASSIGNED);
+    }
+
     getIO().to(`user:${booking.user}`).emit("delivery:assigned", delivery);
     getIO().to(`user:${delivery.staff}`).emit("delivery:assigned", delivery);
     await notify({
@@ -296,7 +393,11 @@ export const reassignDelivery = async (req, res) => {
 
     res.json({ success: true, delivery });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    if (err instanceof InvalidTransitionError) {
+      return res.status(err.status).json({ success: false, message: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ success: false, message: "Something went wrong" });
   }
 };
 
@@ -326,7 +427,7 @@ export const listDeliveries = async (req, res) => {
     if (req.query.area) filter.area = req.query.area;
 
     if (req.user.role === "delivery-admin") {
-      const regionWorkshops = await Workshop.find({ region: req.user.region }).select("_id");
+      const regionWorkshops = await Workshop.find({ region: regionQuery(req.user.region) }).select("_id");
       filter.workshop = { $in: regionWorkshops.map((w) => w._id) };
     } else if (!canReadAnyDelivery(req.user)) {
       if (req.user.role === "workshop-admin") {
@@ -411,6 +512,23 @@ export const updateDeliveryStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: `Cannot move from "${delivery.status}" to "${status}"` });
     }
 
+    const booking = await ServiceRequest.findById(delivery.booking);
+    if (!booking) return res.status(404).json({ success: false, message: "Booking not found" });
+
+    // A cancelled booking stands its legs down — the driver shouldn't be able
+    // to keep advancing a job that no longer exists.
+    if (booking.status === BOOKING_STATUS.CANCELLED) {
+      return res.status(409).json({ success: false, message: "This booking has been cancelled" });
+    }
+
+    // Move the booking first: if this step isn't legal for the booking's
+    // workflow the delivery must not advance either, or the two would drift
+    // apart — which is exactly the bug this whole state machine exists to stop.
+    const nextBookingStatus = (delivery.leg === "pickup" ? PICKUP_LEG_TO_BOOKING : RETURN_LEG_TO_BOOKING)[status];
+    if (nextBookingStatus) {
+      await moveBookingTo(booking, nextBookingStatus);
+    }
+
     delivery.status = status;
     if (EN_ROUTE_STATUSES.includes(status)) delivery.startedAt = new Date();
     const isTerminal = status === "at_workshop" || status === "delivered";
@@ -424,13 +542,16 @@ export const updateDeliveryStatus = async (req, res) => {
     // (settleBookingPayment) or by assignDelivery when a leg is assigned
     // after the booking is already paid — never by a leg simply finishing.
 
-    const booking = await ServiceRequest.findById(delivery.booking).select("user");
     getIO().to(`booking:${delivery.booking}`).emit("delivery:status", delivery);
-    if (booking) getIO().to(`user:${booking.user}`).emit("delivery:status", delivery);
+    getIO().to(`user:${booking.user}`).emit("delivery:status", delivery);
 
     res.json({ success: true, delivery });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    if (err instanceof InvalidTransitionError) {
+      return res.status(err.status).json({ success: false, message: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ success: false, message: "Something went wrong" });
   }
 };
 

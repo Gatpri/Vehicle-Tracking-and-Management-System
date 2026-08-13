@@ -6,50 +6,69 @@ import axios from "axios";
 const SENTIMENT_SERVICE_URL = process.env.SENTIMENT_SERVICE_URL || "http://127.0.0.1:8000";
 
 // ---------------------------------------------------------------------------
-// CONTRACT — implement this endpoint when your classifier is ready.
+// LLM-based sentiment analysis using Gemini Flash 2.5 with Mistral fallback.
+// The ANPR service (anpr_service/llm_sentiment.py) handles the actual LLM calls.
 //
-//   POST {SENTIMENT_SERVICE_URL}/sentiment
-//   body: { "text": "गाडी राम्रो बनायो" }
-//
-//   200 response:
-//   {
-//     "label": "positive" | "neutral" | "negative",
-//     "score": 0.87,          // -1 (most negative) .. +1 (most positive)
-//     "confidence": 0.93,     // 0..1, the model's own certainty
-//     "language": "devanagari" | "romanized" | "english",
-//     "modelVersion": "nep-sentiment-v1"
-//   }
-//
-// Until that exists, every call here fails and reviews are stored with
-// sentiment.label = "pending". Once it's live, run
-//   node backend_api/scripts/backfillSentiment.js
-// to score everything written in the meantime. No other code changes.
+// This service delegates all sentiment analysis to the ANPR service.
+// If the ANPR service is unavailable, reviews will be marked as "unavailable"
+// rather than using any fallback analysis.
 // ---------------------------------------------------------------------------
 
 export const isSentimentConfigured = async () => {
   try {
-    await axios.get(`${SENTIMENT_SERVICE_URL}/sentiment/health`, { timeout: 3000 });
-    return true;
-  } catch {
+    const response = await axios.get(`${SENTIMENT_SERVICE_URL}/sentiment/health`, { timeout: 5000 });
+    return response.data.available === true;
+  } catch (err) {
+    console.error("Sentiment service health check failed:", err.message);
     return false;
   }
 };
 
-// Returns a sentiment object shaped for Review.sentiment, or null when the
-// classifier can't be reached. Callers treat null as "leave it pending" —
-// a review must never fail to save because the ML service is down.
+// Main sentiment analysis function - DELEGATES TO LLM SERVICE
+// If LLM service is unavailable, returns result with label "unavailable"
 export const analyzeSentiment = async (text) => {
-  if (!text?.trim()) return null;
+  if (!text?.trim()) {
+    return {
+      label: "neutral",
+      score: 0.0,
+      confidence: 0.5,
+      language: "english",
+      modelVersion: "empty-text",
+      scoredAt: new Date()
+    };
+  }
 
   try {
     const { data } = await axios.post(
       `${SENTIMENT_SERVICE_URL}/sentiment`,
       { text },
-      { timeout: 10000 }
+      { timeout: 15000 } // 15 second timeout for LLM calls
     );
 
+    // If LLM service reports unavailable, mark review as unavailable
+    if (data.error || data.label === "unavailable") {
+      console.warn("LLM sentiment analysis unavailable:", data.error || "service returned unavailable");
+      return {
+        label: "unavailable",
+        score: null,
+        confidence: null,
+        language: data.language || "",
+        modelVersion: data.modelVersion || "llm-unavailable",
+        scoredAt: new Date()
+      };
+    }
+
+    // Validate the result
     if (!["positive", "neutral", "negative"].includes(data?.label)) {
-      throw new Error(`Unexpected label from sentiment service: ${data?.label}`);
+      console.warn(`Unexpected label from LLM service: ${data?.label}`);
+      return {
+        label: "unavailable",
+        score: null,
+        confidence: null,
+        language: data.language || "",
+        modelVersion: data.modelVersion || "invalid-label",
+        scoredAt: new Date()
+      };
     }
 
     return {
@@ -59,9 +78,50 @@ export const analyzeSentiment = async (text) => {
       language: data.language ?? "",
       modelVersion: data.modelVersion ?? "",
       scoredAt: new Date(),
+      explain: data.explain || {},
     };
   } catch (err) {
-    console.error("Sentiment scoring unavailable, leaving review pending:", err.message);
-    return null;
+    console.error("LLM sentiment service unavailable, leaving review marked as unavailable:", err.message);
+    return {
+      label: "unavailable",
+      score: null,
+      confidence: null,
+      language: "",
+      modelVersion: "llm-service-unavailable",
+      scoredAt: new Date()
+    };
   }
+};
+
+// Simple test function
+export const testSentimentAnalysis = async () => {
+  const testCases = [
+    { text: 'sewa ramro thiyo', expected: 'positive' },
+    { text: 'service bakwas thiyo', expected: 'negative' },
+    { text: 'good service', expected: 'positive' },
+    { text: 'bad service', expected: 'negative' },
+  ];
+  
+  console.log('🧪 Testing LLM Sentiment Analysis');
+  console.log('='.repeat(80));
+  
+  for (const test of testCases) {
+    try {
+      const result = await analyzeSentiment(test.text);
+      const passed = result.label === test.expected && result.label !== 'unavailable';
+      
+      console.log(`${passed ? '✅' : '⚠️'} "${test.text}" -> ${result.label.toUpperCase()}`);
+      console.log(`   Expected: ${test.expected.toUpperCase()}, Got: ${result.label.toUpperCase()}`);
+      if (result.label === 'unavailable') {
+        console.log(`   ⚠️  LLM service unavailable - check API keys in the root .env`);
+      }
+      console.log(`   Confidence: ${result.confidence}`);
+      console.log(`   Model: ${result.modelVersion}`);
+      console.log('');
+    } catch (error) {
+      console.log(`❌ Error testing "${test.text}": ${error.message}`);
+    }
+  }
+  
+  console.log('='.repeat(80));
 };

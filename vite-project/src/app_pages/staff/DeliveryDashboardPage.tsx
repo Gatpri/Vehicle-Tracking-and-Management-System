@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../../lib/api";
 import { getSocket } from "../../lib/socket";
 import LiveDeliveryMap from "../../components/LiveDeliveryMap";
+import { legStatusLabel } from "../../lib/bookingWorkflow";
 
 type DeliveryStatus =
   | "unassigned"
@@ -19,17 +20,19 @@ interface Delivery {
   _id: string;
   leg: "pickup" | "return";
   status: DeliveryStatus;
+  // Populated refs: null once the referenced document is gone, so a stale
+  // delivery can't take the whole dashboard down with it.
   booking: {
     _id: string;
     serviceType: string;
     pickupLocation?: { lat: number; lng: number; address: string };
-    vehicle: { plateNumber: string; make: string; model: string };
+    vehicle: { plateNumber: string; make: string; model: string } | null;
     // One combined round-trip fee, shared by both legs (paid once, to
     // whichever single staff member does the whole round trip).
     deliveryFee?: number | null;
     distanceKm?: number | null;
-  };
-  workshop: { name: string; location: { lat: number; lng: number }; address: string };
+  } | null;
+  workshop: { name: string; location: { lat: number; lng: number }; address: string } | null;
   customerLocation?: { lat: number; lng: number; address: string };
   // Set on THIS leg once the booking's combined fee has actually been paid
   // out — only one leg will ever have this set, since there's only one
@@ -41,13 +44,13 @@ interface Delivery {
 // only to derive the single "next step" action button; the server is the
 // real gate.
 const PICKUP_LEG_NEXT: Partial<Record<DeliveryStatus, { next: DeliveryStatus; label: string }>> = {
-  assigned: { next: "en_route_to_pickup", label: "Start heading to pickup" },
+  assigned: { next: "en_route_to_pickup", label: "Go out for delivery" },
   en_route_to_pickup: { next: "picked_up", label: "Mark picked up" },
   picked_up: { next: "en_route_to_workshop", label: "Start heading to workshop" },
-  en_route_to_workshop: { next: "at_workshop", label: "Mark arrived at workshop" },
+  en_route_to_workshop: { next: "at_workshop", label: "Mark dropped at workshop" },
 };
 const RETURN_LEG_NEXT: Partial<Record<DeliveryStatus, { next: DeliveryStatus; label: string }>> = {
-  assigned: { next: "en_route_to_dropoff", label: "Start heading to customer" },
+  assigned: { next: "en_route_to_dropoff", label: "Go out for delivery" },
   en_route_to_dropoff: { next: "delivered", label: "Mark delivered" },
 };
 // Kept in sync with the backend's EN_ROUTE_STATUSES (deliveryController.js,
@@ -55,17 +58,6 @@ const RETURN_LEG_NEXT: Partial<Record<DeliveryStatus, { next: DeliveryStatus; la
 // actually live, including "en_route_to_workshop" (picked_up -> at the shop).
 const EN_ROUTE = ["en_route_to_pickup", "en_route_to_workshop", "en_route_to_dropoff"];
 
-const statusLabel: Record<DeliveryStatus, string> = {
-  unassigned: "Unassigned",
-  assigned: "Assigned",
-  en_route_to_pickup: "En route to pickup",
-  picked_up: "Picked up",
-  en_route_to_workshop: "En route to workshop",
-  at_workshop: "At workshop",
-  en_route_to_dropoff: "En route to customer",
-  delivered: "Delivered",
-  cancelled: "Cancelled",
-};
 
 // iOS 13+ gates DeviceOrientationEvent behind an explicit permission prompt
 // that can only be requested from a direct user gesture (a click handler) —
@@ -179,7 +171,7 @@ function DeliveryCard({ delivery, onUpdated }: { delivery: Delivery; onUpdated: 
     try {
       const res = await api.patch(`/deliveries/${delivery._id}/status`, { status: action.next });
       onUpdated(res.data.delivery);
-      toast.success(statusLabel[action.next]);
+      toast.success(legStatusLabel(delivery.leg, action.next));
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to update status"));
     } finally {
@@ -190,20 +182,20 @@ function DeliveryCard({ delivery, onUpdated }: { delivery: Delivery; onUpdated: 
   const destination =
     delivery.leg === "pickup" && ["assigned", "en_route_to_pickup"].includes(delivery.status)
       ? { ...delivery.customerLocation, label: "Pickup point" }
-      : { ...delivery.workshop.location, label: delivery.workshop.name };
+      : { ...delivery.workshop?.location, label: delivery.workshop?.name ?? "Workshop" };
 
   return (
     <div className="uh-card" style={{ marginBottom: 16 }}>
       <div className="ap-row">
         <div className="ap-row-main">
           <span className="ap-row-title">
-            {delivery.leg === "pickup" ? "Pickup" : "Return"} — {delivery.booking.vehicle?.plateNumber}
+            {delivery.leg === "pickup" ? "Pickup" : "Return"} — {delivery.booking?.vehicle?.plateNumber ?? "Unknown vehicle"}
           </span>
           <span className="ap-row-sub">
-            {delivery.booking.serviceType} · {delivery.workshop.name}
+            {delivery.booking?.serviceType ?? "Service"} · {delivery.workshop?.name ?? "Unknown workshop"}
             {delivery.customerLocation?.address ? ` · ${delivery.customerLocation.address}` : ""}
           </span>
-          {delivery.booking.deliveryFee != null && (
+          {delivery.booking?.deliveryFee != null && (
             <span className="ap-row-sub">
               {delivery.booking.distanceKm != null && `${delivery.booking.distanceKm.toFixed(1)} km · `}
               Round-trip delivery fee Rs {(delivery.booking.deliveryFee / 100).toFixed(2)} — you earn Rs {((delivery.booking.deliveryFee * 0.95) / 100).toFixed(2)}
@@ -211,7 +203,7 @@ function DeliveryCard({ delivery, onUpdated }: { delivery: Delivery; onUpdated: 
             </span>
           )}
         </div>
-        <span className="uh-badge uh-badge-blue">{statusLabel[delivery.status]}</span>
+        <span className="uh-badge uh-badge-blue">{legStatusLabel(delivery.leg, delivery.status)}</span>
       </div>
 
       <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>

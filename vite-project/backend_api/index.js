@@ -27,6 +27,7 @@ import { initializeApp, cert, getApps } from "firebase-admin/app";
 import { initSocket } from "./config/socket.js";
 import { registerHandlers } from "./sockets/index.js";
 import { startCameraPoller } from "./services/cameraPollerService.js";
+import { startBookingAutoComplete } from "./services/bookingAutoComplete.js";
 
 let firebaseAdminInitialized = false;
 try {
@@ -59,6 +60,13 @@ export { firebaseAdminInitialized };
 
 const app = express();
 
+// All external traffic now arrives via nginx (see docker-compose.yml/
+// nginx.conf), so req.ip must come from the X-Forwarded-For header nginx
+// sets, not the raw socket peer (which would always be nginx's own address —
+// making every request look like it came from the same IP for rate-limiting
+// purposes like login.js's per-IP lockout).
+app.set("trust proxy", true);
+
 // FRONTEND_URL is included here too so CORS automatically follows whatever
 // it's set to (a Cloudflare tunnel URL for cross-device access, or
 // localhost for same-machine dev) without a second place to edit.
@@ -78,27 +86,35 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
+
 await connectDB();
 
-app.use("/", signupRoutes)
-app.use("/", loginRoutes)
-app.use("/", recoverRoutes);
-app.use("/", googleAuthRoutes);
-app.use("/", protectedRoutes);
-app.use("/", vehicleRoutes);
-app.use("/", workshopRoutes);
-app.use("/", bookingRoutes);
-app.use("/", trackingRoutes);
-app.use("/", deliveryRoutes);
-app.use("/", deliveryStaffRoutes);
-app.use("/", cctvRoutes);
-app.use("/", cameraRoutes);
-app.use("/", chatRoutes);
-app.use("/", walletRoutes);
-app.use("/", sosRoutes);
-app.use("/", theftRoutes);
-app.use("/", notificationRoutes);
-app.use("/", quoteRoutes);
+// Mounted under /api so nginx can proxy every browser-facing call through
+// port 80/443 regardless of which host/IP the browser used to reach the
+// frontend — a bare "/" mount meant every client had to hardcode the
+// backend's own host:port directly, which only ever worked from the Docker
+// host itself. /health stays unprefixed: Docker's healthcheck curls it
+// from inside the container, never through nginx.
+app.use("/api", signupRoutes)
+app.use("/api", loginRoutes)
+app.use("/api", recoverRoutes);
+app.use("/api", googleAuthRoutes);
+app.use("/api", protectedRoutes);
+app.use("/api", vehicleRoutes);
+app.use("/api", workshopRoutes);
+app.use("/api", bookingRoutes);
+app.use("/api", trackingRoutes);
+app.use("/api", deliveryRoutes);
+app.use("/api", deliveryStaffRoutes);
+app.use("/api", cctvRoutes);
+app.use("/api", cameraRoutes);
+app.use("/api", chatRoutes);
+app.use("/api", walletRoutes);
+app.use("/api", sosRoutes);
+app.use("/api", theftRoutes);
+app.use("/api", notificationRoutes);
+app.use("/api", quoteRoutes);
 
 const httpServer = http.createServer(app);
 const io = initSocket(httpServer, corsOptions);
@@ -109,6 +125,7 @@ httpServer.listen(3000, () => {
 });
 
 startCameraPoller();
+startBookingAutoComplete();
 
 
 

@@ -2,6 +2,7 @@ import Review from "../models/Review.js";
 import Workshop from "../models/Workshop.js";
 import ServiceRequest from "../models/ServiceRequest.js";
 import { analyzeSentiment } from "../services/sentimentService.js";
+import { BOOKING_STATUS } from "../constants/bookingWorkflow.js";
 
 // Recomputes a workshop's rating and sentiment aggregates from its reviews.
 // Always derived, never incremented: an edited or deleted review would drift
@@ -65,7 +66,9 @@ export const createReview = async (req, res) => {
     if (!request.user.equals(req.user._id)) {
       return res.status(403).json({ success: false, message: "That booking isn't yours" });
     }
-    if (request.status !== "completed") {
+    // "finished", not "completed": a delivery booking is still mid-return in
+    // completed, so the customer hasn't had the whole experience yet.
+    if (request.status !== BOOKING_STATUS.FINISHED) {
       return res.status(400).json({ success: false, message: "You can only review a completed service" });
     }
 
@@ -112,7 +115,7 @@ export const listWorkshopReviews = async (req, res) => {
 // don't have a review yet.
 export const listReviewableBookings = async (req, res) => {
   try {
-    const completed = await ServiceRequest.find({ user: req.user._id, status: "completed" })
+    const completed = await ServiceRequest.find({ user: req.user._id, status: BOOKING_STATUS.FINISHED })
       .populate("workshop", "name")
       .sort({ updatedAt: -1 });
 

@@ -3,8 +3,26 @@ import Vehicle from "../models/Vehicle.js";
 import Workshop from "../models/Workshop.js";
 import PartsQuote from "../models/PartsQuote.js";
 import Transaction from "../models/Transaction.js";
+import Delivery from "../models/Delivery.js";
 import { hasPermission, isWorkshopScoped } from "../policies/permissions.js";
 import { getIO } from "../config/socket.js";
+import { moveBookingTo } from "../services/bookingStatusService.js";
+import {
+  BOOKING_STATUS,
+  CANCELLABLE_STATUSES,
+  CUSTOMER_CANCELLABLE_STATUSES,
+  InvalidTransitionError,
+} from "../constants/bookingWorkflow.js";
+
+// A rejected transition is a conflict with the booking's current state, not a
+// server fault — surfaced as 409 with the reason so the UI can explain it.
+const respondToWorkflowError = (res, err) => {
+  if (err instanceof InvalidTransitionError) {
+    return res.status(err.status).json({ success: false, message: err.message });
+  }
+  console.error(err);
+  return res.status(500).json({ success: false, message: "Something went wrong" });
+};
 
 const canReadAny = (user) => hasPermission(user.role, "booking:read:any", user.permissions);
 
@@ -112,7 +130,9 @@ export const getVehicleServiceHistory = async (req, res) => {
       return res.status(403).json({ success: false, message: "Not your vehicle" });
     }
 
-    const bookings = await ServiceRequest.find({ vehicle: vehicle._id, status: "completed" })
+    // "finished", not "completed": a delivery booking sits in completed while
+    // the vehicle is still being driven back, which isn't service history yet.
+    const bookings = await ServiceRequest.find({ vehicle: vehicle._id, status: BOOKING_STATUS.FINISHED })
       .populate("workshop", "name address logoUrl")
       .sort({ updatedAt: -1 });
 
@@ -193,9 +213,9 @@ export const getBookingPayment = async (req, res) => {
 
     res.json({
       success: true,
-      // "pending" reads better than "unpaid" once a job is finished and the
-      // customer simply hasn't settled yet.
-      paymentStatus: booking.paymentStatus === "unpaid" && booking.status === "completed"
+      // "pending" reads better than "unpaid" once the workshop has actually
+      // asked for the money and the customer simply hasn't settled yet.
+      paymentStatus: booking.paymentStatus === "unpaid" && booking.status === BOOKING_STATUS.PAYMENT_PENDING
         ? "pending"
         : booking.paymentStatus,
       amountDue: booking.finalPrice ?? booking.quotedPrice ?? null,
@@ -231,6 +251,7 @@ export const getBooking = async (req, res) => {
 // workshop sends and the customer accepts a parts-quote round (see
 // confirmQuote in quoteController.js, which sets finalPrice and runs the
 // overpricing check once there's an actual figure to check).
+// Step 1: the workshop accepts the customer's request.
 export const acceptBooking = async (req, res) => {
   try {
     const booking = await ServiceRequest.findById(req.params.id);
@@ -238,21 +259,47 @@ export const acceptBooking = async (req, res) => {
     if (!(await canManageBooking(req.user, booking.workshop))) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
-    if (booking.status !== "pending") {
-      return res.status(400).json({ success: false, message: `Cannot accept a booking in status "${booking.status}"` });
-    }
 
-    booking.status = "accepted";
-    await booking.save();
-
-    getIO().to(`user:${booking.user}`).emit("booking:updated", booking);
-
+    await moveBookingTo(booking, BOOKING_STATUS.ACCEPTED);
     res.json({ success: true, booking });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    respondToWorkflowError(res, err);
   }
 };
 
+// Step 2: the customer asks for the pickup leg. Only meaningful for a booking
+// that opted into delivery at creation — a self-drop-off booking has no
+// delivery-requested state to enter at all.
+export const requestPickupDelivery = async (req, res) => {
+  try {
+    const booking = await ServiceRequest.findById(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: "Booking not found" });
+    if (!booking.user.equals(req.user._id)) {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+    if (!booking.deliveryRequested) {
+      return res.status(400).json({
+        success: false,
+        message: "This booking was created without delivery service",
+      });
+    }
+
+    await moveBookingTo(booking, BOOKING_STATUS.DELIVERY_REQUESTED);
+    try {
+      getIO().to("admins").emit("booking:delivery-requested", {
+        bookingId: booking._id.toString(),
+      });
+    } catch { /* socket outage must not fail the request */ }
+
+    res.json({ success: true, booking });
+  } catch (err) {
+    respondToWorkflowError(res, err);
+  }
+};
+
+// Step 7: only the workshop starts the service, and only once the vehicle is
+// actually there — for a delivery booking that means the pickup leg reached
+// "dropped", which the transition map enforces rather than a status check here.
 export const startBooking = async (req, res) => {
   try {
     const booking = await ServiceRequest.findById(req.params.id);
@@ -260,19 +307,35 @@ export const startBooking = async (req, res) => {
     if (!(await canManageBooking(req.user, booking.workshop))) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
-    if (booking.status !== "accepted") {
-      return res.status(400).json({ success: false, message: `Cannot start a booking in status "${booking.status}"` });
-    }
 
-    booking.status = "in_progress";
-    await booking.save();
-    getIO().to(`user:${booking.user}`).emit("booking:updated", booking);
+    await moveBookingTo(booking, BOOKING_STATUS.SERVICING_STARTED);
     res.json({ success: true, booking });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    respondToWorkflowError(res, err);
   }
 };
 
+// Step 9: the workshop closes out the agreed estimate and asks for payment.
+export const requestPayment = async (req, res) => {
+  try {
+    const booking = await ServiceRequest.findById(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: "Booking not found" });
+    if (!(await canManageBooking(req.user, booking.workshop))) {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+
+    // Nothing to pay for until a quote round has actually been agreed.
+    booking.finalPrice = req.body?.finalPrice ?? booking.finalPrice ?? 0;
+    await moveBookingTo(booking, BOOKING_STATUS.PAYMENT_PENDING);
+    res.json({ success: true, booking });
+  } catch (err) {
+    respondToWorkflowError(res, err);
+  }
+};
+
+// The workshop signing the finished job off, after payment has cleared. For a
+// delivery booking this is what releases the vehicle for its return leg — it
+// can't be assigned before someone confirms the work is actually done.
 export const completeBooking = async (req, res) => {
   try {
     const booking = await ServiceRequest.findById(req.params.id);
@@ -280,20 +343,20 @@ export const completeBooking = async (req, res) => {
     if (!(await canManageBooking(req.user, booking.workshop))) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
-    if (booking.status !== "in_progress") {
-      return res.status(400).json({ success: false, message: `Cannot complete a booking in status "${booking.status}"` });
+
+    await moveBookingTo(booking, BOOKING_STATUS.COMPLETED);
+
+    // A delivery booking is now assignable for its return leg, which is the
+    // delivery admin's cue to pick it up off their board.
+    if (booking.deliveryRequested) {
+      try {
+        getIO().to("admins").emit("booking:return-ready", { bookingId: booking._id.toString() });
+      } catch { /* socket outage must not fail the request */ }
     }
 
-    booking.status = "completed";
-    // Preserves whatever confirmQuote already wrote, allows a manual override
-    // in the body, and falls back to 0 (never null/undefined) for a booking
-    // that never had any parts quoted — keeps downstream payment math safe.
-    booking.finalPrice = req.body?.finalPrice ?? booking.finalPrice ?? 0;
-    await booking.save();
-    getIO().to(`user:${booking.user}`).emit("booking:updated", booking);
     res.json({ success: true, booking });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    respondToWorkflowError(res, err);
   }
 };
 
@@ -307,44 +370,33 @@ export const cancelBooking = async (req, res) => {
     if (!isOwner && !managed) {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
-    if (isOwner && !managed && booking.status !== "pending") {
-      return res.status(400).json({ success: false, message: "You can only cancel a booking while it's still pending" });
+
+    // A customer may only back out before the workshop commits; a manager has
+    // a wider window but still can't cancel once money has moved, because
+    // there's no refund path to undo it.
+    const allowed = isOwner && !managed ? CUSTOMER_CANCELLABLE_STATUSES : CANCELLABLE_STATUSES;
+    if (!allowed.includes(booking.status)) {
+      return res.status(409).json({
+        success: false,
+        message: `Cannot cancel a booking in status "${booking.status}"`,
+      });
     }
 
-    booking.status = "cancelled";
+    // Cancelling strands any in-flight delivery leg, so stand them down too —
+    // previously staff kept driving on a cancelled booking.
+    await Delivery.updateMany(
+      { booking: booking._id, status: { $nin: ["delivered", "at_workshop", "cancelled"] } },
+      { $set: { status: "cancelled" } },
+    );
+
+    booking.status = BOOKING_STATUS.CANCELLED;
+    booking.statusChangedAt = new Date();
     await booking.save();
-    getIO().to(`user:${booking.user}`).emit("booking:updated", booking);
+    try {
+      getIO().to(`user:${booking.user}`).emit("booking:updated", booking);
+    } catch { /* ignore */ }
     res.json({ success: true, booking });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-// The customer's opt-in for return delivery — separate from and never
-// implied by deliveryRequested (pickup). Only marks intent; a fee/charge
-// only exists once admin/delivery-admin actually assigns a return-leg
-// delivery-staff (assignDelivery, deliveryController.js), which is itself
-// gated on this flag being set first.
-export const requestReturnDelivery = async (req, res) => {
-  try {
-    const booking = await ServiceRequest.findById(req.params.id);
-    if (!booking) return res.status(404).json({ success: false, message: "Booking not found" });
-    if (!booking.user.equals(req.user._id)) {
-      return res.status(403).json({ success: false, message: "Forbidden" });
-    }
-    if (!(booking.status === "completed" && booking.paymentStatus === "paid")) {
-      return res.status(400).json({ success: false, message: "Booking must be completed and paid first" });
-    }
-    if (booking.returnDeliveryRequested) {
-      return res.status(400).json({ success: false, message: "Return delivery already requested" });
-    }
-
-    booking.returnDeliveryRequested = true;
-    await booking.save();
-
-    getIO().to("admins").emit("booking:return-delivery-requested", booking);
-    res.json({ success: true, booking });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    respondToWorkflowError(res, err);
   }
 };

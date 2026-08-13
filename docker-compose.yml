@@ -1,0 +1,170 @@
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: anpr_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: myDatabase
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - anpr-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--authenticationDatabase", "admin", "-u", "admin", "-p", "password123", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    command: mongod --auth
+
+  # ANPR Service (Python - YOLO + LLM Sentiment Analysis)
+  anpr_service:
+    build:
+      context: .
+      dockerfile: Dockerfile.anpr
+    container_name: anpr_service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # LLM Sentiment Analysis: Gemini primary, Mistral fallback
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-your-gemini-api-key}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+      # ANPR Service Config
+      ANPR_PORT: 8000
+      ANPR_WEIGHTS_DIR: /app/weights
+      # Python env
+      PYTHONUNBUFFERED: 1
+      TORCH_NUM_THREADS: 4
+    volumes:
+      - ./vite-project/anpr_service:/app
+      - anpr_models:/app/models
+      - ./yolo_weights:/app/weights:ro  # Optional: mount YOLO weights if available
+    networks:
+      - anpr-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      - mongodb
+
+  # Backend API (Node.js Express)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: anpr_backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Database
+      MONGODB_URI: mongodb://admin:password123@mongodb:27017/myDatabase?authSource=admin
+
+      # Auth token signing secret. No default on purpose — the backend refuses
+      # to boot without it rather than fall back to a secret committed to the repo.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see .env)}
+      
+      # Sentiment Service URL (points to ANPR service)
+      SENTIMENT_SERVICE_URL: http://anpr_service:8000
+      
+      # Gmail SMTP
+      GMAIL_USER: ${GMAIL_USER:-your-email@gmail.com}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-your-app-password}
+      
+      # Firebase Admin SDK
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-th-sem-project-6b56f}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-firebase-adminsdk-fbsvc@th-sem-project-6b56f.iam.gserviceaccount.com}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
+      
+      # eSewa Payment
+      ESEWA_MERCHANT_CODE: ${ESEWA_MERCHANT_CODE:-EPAYTEST}
+      ESEWA_SECRET_KEY: ${ESEWA_SECRET_KEY:-8gBm/:&EnhH.1/q}
+      ESEWA_PAYMENT_URL: https://rc-epay.esewa.com.np/api/epay/main/v2/form
+      ESEWA_STATUS_CHECK_URL: https://rc.esewa.com.np/api/epay/transaction/status/
+      
+      # Cloudinary
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-jyjgbrcc}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-341331125637447}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-KCCt6yhd6m7vgSRIe8JgAfPRPAI}
+      
+      # URLs. BACKEND_BASE_URL builds links that go out to the real world
+      # (email verification, eSewa payment callbacks) — it must be reachable
+      # by whoever/whatever clicks them, so it goes through nginx on port 80,
+      # not the backend's own container-internal port 3000.
+      #
+      # Deliberately NOT ${BACKEND_BASE_URL}: the root .env holds the
+      # bare-metal dev values (:3000 / :5173, used by `npm run dev`), which
+      # are wrong inside Docker where nginx fronts everything on port 80.
+      # Set DOCKER_BACKEND_BASE_URL / DOCKER_FRONTEND_URL in .env to point at
+      # a LAN IP, tunnel URL, or real domain for access from other devices.
+      BACKEND_BASE_URL: ${DOCKER_BACKEND_BASE_URL:-http://localhost}
+      FRONTEND_URL: ${DOCKER_FRONTEND_URL:-http://localhost}
+      
+      # Roboflow
+      ROBOFLOW_API_KEY: ${ROBOFLOW_API_KEY:-tPB5qhSpP6lDjg6FCOph}
+      ROBOFLOW_PROJECT: ${ROBOFLOW_PROJECT:-8th-sem-proj}
+      ROBOFLOW_VERSION: ${ROBOFLOW_VERSION:-1}
+      
+      # Company eSewa
+      COMPANY_ESEWA_ID: ${COMPANY_ESEWA_ID:-9818091358}
+      
+      # Node env
+      NODE_ENV: production
+      PORT: 3000
+    volumes:
+      - ./vite-project/backend_api:/app/backend_api:ro
+    networks:
+      - anpr-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      anpr_service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend (Nginx + React)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: anpr_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      - anpr-network
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  anpr-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  anpr_models:
+    driver: local

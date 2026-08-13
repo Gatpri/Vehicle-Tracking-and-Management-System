@@ -78,6 +78,27 @@
 
 .add-btn:hover { background: #6d28d9; }
 
+/* Per-table search. Sits between the section heading and its table, so each
+   table filters independently rather than one search box driving all of them. */
+.table-search {
+  width: 100%;
+  max-width: 320px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid #2a2d45;
+  background: #12131f;
+  color: #f4f4f4;
+  font-size: 13px;
+}
+
+.table-search::placeholder { color: #555; }
+
+.table-search:focus {
+  outline: none;
+  border-color: #7c3aed;
+}
+
 .dash-table {
   width: 100%;
   border-collapse: collapse;

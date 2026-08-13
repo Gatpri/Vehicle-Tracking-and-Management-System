@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import { getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { JWT_SECRET } from "../config/jwt.js";
 
 const router = express.Router();
 
@@ -40,7 +41,7 @@ router.post("/google-auth", async (req, res) => {
 
     const jwtToken = jwt.sign(
       { userId: user._id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || "your-secret-key-change-this",
+      JWT_SECRET,
       { expiresIn: "24h" }
     );
 

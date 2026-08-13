@@ -10,6 +10,9 @@ import {
   assignManager,
   getMyWorkshop,
   uploadLogo,
+  submitWorkshopChangeRequest,
+  listWorkshopChangeRequests,
+  reviewWorkshopChangeRequest,
 } from "../controllers/workshopController.js";
 import { upload } from "../config/multer.js";
 import {
@@ -27,6 +30,13 @@ router.get("/workshops/mine", verifyToken, getMyWorkshop);
 // requirePermission("workshop:create") keeps it to admin/superadmin, since
 // workshop-admin deliberately lacks that permission.
 router.patch("/workshops/:id/manager", verifyToken, requirePermission("workshop:create"), assignManager);
+// Change requests. The list is shared: admins see everything pending, a
+// workshop-admin sees only their own garage's history (narrowed in the
+// controller), so both roles can reach it with the same permission.
+router.get("/workshop-change-requests", verifyToken, requirePermission("workshop:request-update"), listWorkshopChangeRequests);
+router.post("/workshops/:id/change-requests", verifyToken, requirePermission("workshop:request-update"), submitWorkshopChangeRequest);
+router.patch("/workshop-change-requests/:requestId", verifyToken, requirePermission("workshop:review-request"), reviewWorkshopChangeRequest);
+
 router.get("/reviews/pending", verifyToken, listReviewableBookings);
 router.post("/reviews", verifyToken, createReview);
 router.get("/workshops", listWorkshops);
@@ -34,7 +44,10 @@ router.get("/workshops/:id/reviews", listWorkshopReviews);
 router.get("/workshops/:id", getWorkshop);
 router.post("/workshops", verifyToken, requirePermission("workshop:create"), createWorkshop);
 router.patch("/workshops/:id", verifyToken, requirePermission("workshop:update"), updateWorkshop);
-router.post("/workshops/:id/logo", verifyToken, requirePermission("workshop:update"), upload.single("image"), uploadLogo);
+// A logo is an image, not a price, and it can't be meaningfully diffed in a
+// request — so it stays a direct edit, open to a workshop-admin for their own
+// garage (ownership is enforced inside uploadLogo).
+router.post("/workshops/:id/logo", verifyToken, requirePermission("workshop:request-update"), upload.single("image"), uploadLogo);
 router.delete("/workshops/:id", verifyToken, requirePermission("workshop:delete"), deleteWorkshop);
 
 export default router;
