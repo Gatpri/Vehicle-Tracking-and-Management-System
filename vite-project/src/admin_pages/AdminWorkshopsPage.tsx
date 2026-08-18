@@ -8,8 +8,15 @@ import MyWorkshopPanel from "./MyWorkshopPanel";
 import WorkshopReviewsPanel from "./WorkshopReviewsPanel";
 import ServicesTableEditor, { type ServiceRow } from "../components/ServicesTableEditor";
 import ServicesTableView from "../components/ServicesTableView";
+import LocationPicker, { type LatLng } from "../components/LocationPicker";
 import WorkshopChangeRequestsPanel from "./WorkshopChangeRequestsPanel";
 import "./AdminPages.css";
+
+/** The assigned manager, or null when unassigned or not populated for this
+ *  caller. managedBy arrives populated only for admin/superadmin — for anyone
+ *  else it's a bare id string, which carries no name or email to show. */
+const managerOf = (w: Workshop) =>
+  w.managedBy && typeof w.managedBy === "object" ? w.managedBy : null;
 
 interface Workshop {
   _id: string;
@@ -19,7 +26,9 @@ interface Workshop {
   region?: string;
   status: string;
   servicesOffered: ServiceRow[];
-  managedBy: string | null;
+  // Populated with the assigned manager for admin/superadmin (who may
+  // reassign); a bare id, or null, for everyone else.
+  managedBy: string | { _id: string; firstname: string; lastname: string; email: string; role: string } | null;
   rating: { average: number; count: number };
   sentiment: { score: number; positiveRatio: number; scoredCount: number };
 }
@@ -111,6 +120,22 @@ function AdminWorkshopsPage() {
     initial();
   }, []);
 
+  // lat/lng are strings here (they back plain text inputs and the submit
+  // payload); the map picker works in numbers, so translate at the boundary.
+  // A half-typed or empty field just means "no pin yet" rather than a NaN one.
+  const pickedLocation: LatLng | null = (() => {
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    return Number.isFinite(latNum) && Number.isFinite(lngNum)
+      ? { lat: latNum, lng: lngNum }
+      : null;
+  })();
+
+  const applyPickedLocation = (next: LatLng) => {
+    setLat(String(next.lat));
+    setLng(String(next.lng));
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -189,6 +214,18 @@ function AdminWorkshopsPage() {
             value={area}
             onChange={(e) => setArea(e.target.value)}
           />
+          <LocationPicker
+            value={pickedLocation}
+            onChange={applyPickedLocation}
+            onAddressResolved={(resolved) => {
+              // Offer the looked-up address as a default only — never
+              // overwrite one the admin has already typed.
+              if (!address.trim()) setAddress(resolved);
+            }}
+            height={280}
+          />
+          {/* Kept alongside the map: the pin stays in sync with these, so exact
+              coordinates can still be pasted when someone already has them. */}
           <div style={{ display: "flex", gap: 10 }}>
             <input placeholder="Latitude" value={lat} onChange={(e) => setLat(e.target.value)} required />
             <input placeholder="Longitude" value={lng} onChange={(e) => setLng(e.target.value)} required />
@@ -283,6 +320,20 @@ function AdminWorkshopsPage() {
                   )}
                 </td>
                 <td>
+                  {/* Who currently runs this garage, so an admin can see the
+                      existing manager before reassigning rather than assigning
+                      blind. */}
+                  {managerOf(w) ? (
+                    <div className="adm-ws-manager">
+                      <span className="adm-ws-manager-name">
+                        {managerOf(w)!.firstname} {managerOf(w)!.lastname}
+                      </span>
+                      <span className="adm-sub">{managerOf(w)!.email}</span>
+                    </div>
+                  ) : (
+                    <span className="adm-ws-unassigned">Not assigned</span>
+                  )}
+
                   {/* Assigning a manager both links the garage and promotes a
                       plain user to workshop-admin, so it's one action. */}
                   <div className="adm-ws-assign">

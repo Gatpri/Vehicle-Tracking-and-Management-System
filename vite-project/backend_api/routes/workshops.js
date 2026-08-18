@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyToken, requirePermission } from "../middleware/auth.js";
+import { verifyToken, requirePermission, attachUserIfPresent } from "../middleware/auth.js";
 import {
   listWorkshops,
   recommendWorkshops,
@@ -39,7 +39,9 @@ router.patch("/workshop-change-requests/:requestId", verifyToken, requirePermiss
 
 router.get("/reviews/pending", verifyToken, listReviewableBookings);
 router.post("/reviews", verifyToken, createReview);
-router.get("/workshops", listWorkshops);
+// Public, but attaches the caller when signed in: admins get each workshop's
+// assigned manager in the response, customers browsing the same endpoint don't.
+router.get("/workshops", attachUserIfPresent, listWorkshops);
 router.get("/workshops/:id/reviews", listWorkshopReviews);
 router.get("/workshops/:id", getWorkshop);
 router.post("/workshops", verifyToken, requirePermission("workshop:create"), createWorkshop);

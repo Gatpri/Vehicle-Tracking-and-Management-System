@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "../Styles/home.css";
 import heroImg from "../../assets/hero.png";
@@ -108,18 +108,12 @@ function Home() {
   const navigate = useNavigate();
   const stored = localStorage.getItem("user");
   const currentUser: CurrentUser | null = stored ? JSON.parse(stored) : null;
-  const token = localStorage.getItem("token");
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Direct-access guard: this page is only reachable after a real login.
-  // Hitting /home in the browser without a session bounces straight to /login.
-  useEffect(() => {
-    if (!currentUser || !token) {
-      navigate("/login", { replace: true });
-    }
-  }, [currentUser, token, navigate]);
-
-  if (!currentUser || !token) return null;
+  // Access is decided by the route's ProtectedRoute wrapper (customers only) —
+  // this page is never rendered without a valid customer session, so it needs
+  // no guard of its own. The null check below is a type narrowing, not a gate.
+  if (!currentUser) return null;
 
   const initials = `${currentUser.firstname?.[0] ?? ""}${currentUser.lastname?.[0] ?? ""}`.toUpperCase();
 

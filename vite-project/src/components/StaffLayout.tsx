@@ -22,11 +22,14 @@ function StaffLayout({ children }: { children: ReactNode }) {
             Delivery
           </NavLink>
 
+          {/* No Home link: /home is customer-only, so it would bounce a
+              delivery-staff member straight back here. The logo above returns
+              to /staff/deliveries, this role's landing page. */}
           <nav className="al-links">
-            <NavLink to="/home" className={({ isActive }) => `al-link ${isActive ? "active" : ""}`}>
-              Home
+            <NavLink to="/staff/deliveries" end className={({ isActive }) => `al-link ${isActive ? "active" : ""}`}>
+              My Deliveries
             </NavLink>
-            <NavLink to="/wallet" className={({ isActive }) => `al-link ${isActive ? "active" : ""}`}>
+            <NavLink to="/staff/earnings" className={({ isActive }) => `al-link ${isActive ? "active" : ""}`}>
               My Earnings
             </NavLink>
           </nav>

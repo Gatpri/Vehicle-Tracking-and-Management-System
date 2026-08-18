@@ -16,6 +16,8 @@ const NAV_LINKS = [
   { to: "/safety", label: "Safety" },
 ];
 
+// Customer-only shell: every route rendered in this layout is CUSTOMER_ROLES
+// (see App.tsx), so the nav below never needs role filtering.
 function AppLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
 

@@ -14,6 +14,14 @@ export const TRACKING_ADMIN_ROLE = "vehicle-tracking-admin";
 /** Runs a single garage: its bookings, its details, its customers. */
 export const WORKSHOP_ADMIN_ROLE = "workshop-admin";
 
+/**
+ * An ordinary customer — the only role the public-facing app (home page and
+ * everything it links to) is meant for. Staff roles have their own areas and
+ * are deliberately kept out, so a mis-typed URL can't drop an admin into the
+ * customer shell.
+ */
+export const CUSTOMER_ROLE = "user";
+
 /** Reviews withdrawal requests and pays them out of the company account. */
 export const ACCOUNTING_ADMIN_ROLE = "accounting-admin";
 
@@ -64,20 +72,37 @@ export const WORKSHOP_ROLES = [...FULL_ADMIN_ROLES, WORKSHOP_ADMIN_ROLE];
  * part of ADMIN_AREA_ROLES itself — see that constant's own comment). */
 export const CHAT_ROLES = [...ADMIN_AREA_ROLES, DELIVERY_ADMIN_ROLE];
 
+/**
+ * The customer app: home page, vehicles, bookings, workshops, wallet, SOS.
+ * Customers only — every staff role has a landing page of its own, so an admin
+ * who types /home is redirected back to their own area rather than being shown
+ * a shell full of links that would each bounce them anyway.
+ */
+export const CUSTOMER_ROLES = [CUSTOMER_ROLE];
+
 export const isTrackingAdmin = (role?: string) => role === TRACKING_ADMIN_ROLE;
 export const isWorkshopAdmin = (role?: string) => role === WORKSHOP_ADMIN_ROLE;
 export const isAccountingAdmin = (role?: string) => role === ACCOUNTING_ADMIN_ROLE;
 export const isDeliveryStaff = (role?: string) => role === DELIVERY_STAFF_ROLE;
 export const isDeliveryAdmin = (role?: string) => role === DELIVERY_ADMIN_ROLE;
 
-/** Where a role lands after login — never a page it would be bounced from. */
+/**
+ * Where a role lands after login — never a page it would be bounced from.
+ *
+ * Every branch must return a route that role actually passes. /home is
+ * customer-only (CUSTOMER_ROLES), so it may only be returned for the customer
+ * role itself: returning it for a staff role would bounce them straight back
+ * here and loop. An unrecognised role gets /login rather than a guess, since
+ * there is no area it is known to be allowed into.
+ */
 export const landingPathFor = (role?: string) => {
-  if (!role) return "/home";
+  if (!role) return "/login";
   if (isTrackingAdmin(role)) return "/admin/cctv";
   if (isWorkshopAdmin(role)) return "/admin/bookings";
   if (isAccountingAdmin(role)) return "/admin/withdrawals";
   if (isDeliveryStaff(role)) return "/staff/deliveries";
   if (isDeliveryAdmin(role)) return "/admin/delivery-staff";
   if (FULL_ADMIN_ROLES.includes(role)) return "/dashboard";
-  return "/home";
+  if (role === CUSTOMER_ROLE) return "/home";
+  return "/login";
 };

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
+import LocationPicker from "../components/LocationPicker";
 
 interface Workshop {
   _id: string;
@@ -60,7 +61,6 @@ function WorkshopDetailPage() {
   const [deliveryRequested, setDeliveryRequested] = useState(false);
   const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [pickupAddress, setPickupAddress] = useState("");
-  const [locating, setLocating] = useState(false);
 
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewable, setReviewable] = useState<ReviewableBooking[]>([]);
@@ -111,25 +111,6 @@ function WorkshopDetailPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-
-  const detectPickupLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error("Geolocation isn't available in this browser");
-      return;
-    }
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setPickupLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        toast.success("Pickup location captured");
-        setLocating(false);
-      },
-      () => {
-        toast.error("Couldn't get your location — check browser permissions");
-        setLocating(false);
-      }
-    );
-  };
 
   const handleBook = async (e: FormEvent) => {
     e.preventDefault();
@@ -265,16 +246,18 @@ function WorkshopDetailPage() {
                     placeholder="e.g. Thamel, Kathmandu"
                   />
                 </div>
-                <div className="uh-field">
+                <div className="uh-field uh-field-wide">
                   <label>Pickup location</label>
-                  <button type="button" className="uh-btn uh-btn-sm uh-btn-ghost" onClick={detectPickupLocation} disabled={locating}>
-                    {locating ? "Locating..." : pickupLocation ? "Update my location" : "Use my current location"}
-                  </button>
-                  {pickupLocation && (
-                    <span className="ap-row-sub" style={{ display: "block", marginTop: 6 }}>
-                      {pickupLocation.lat.toFixed(5)}, {pickupLocation.lng.toFixed(5)}
-                    </span>
-                  )}
+                  <LocationPicker
+                    value={pickupLocation}
+                    onChange={setPickupLocation}
+                    onAddressResolved={(resolved) => {
+                      // Prefill the label only while the customer hasn't typed
+                      // their own — theirs always wins.
+                      if (!pickupAddress.trim()) setPickupAddress(resolved);
+                    }}
+                    height={280}
+                  />
                 </div>
               </div>
             )}

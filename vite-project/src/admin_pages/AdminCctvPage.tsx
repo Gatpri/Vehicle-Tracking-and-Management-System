@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { getSocket } from "../lib/socket";
+import LocationPicker, { type LatLng } from "../components/LocationPicker";
 import "./AdminPages.css";
 
 interface Sighting {
@@ -15,6 +16,17 @@ interface Sighting {
   matchedStolen: boolean;
   cameraId: string;
   createdAt: string;
+}
+
+// One plate located in a single frame. The ANPR service returns every plate it
+// finds, each with its own crop, so a frame holding several vehicles shows a
+// box and a popup per vehicle rather than only the best-scoring one.
+interface DetectedPlate {
+  box: { x: number; y: number; width: number; height: number; confidence: number } | null;
+  text: string;
+  textConfidence: number;
+  // JPEG data URI of the plate alone, enlarged server-side for legibility.
+  cropImage: string | null;
 }
 
 // A local-only tile representing one of this browser's own webcams. There's
@@ -65,6 +77,9 @@ function AdminCctvPage() {
   const [newLat, setNewLat] = useState("");
   const [newLng, setNewLng] = useState("");
   const [newTiled, setNewTiled] = useState(false);
+  // The add-camera bar is a single compact row, so the map is opt-in rather
+  // than always mounted — otherwise a 260px map would dominate the toolbar.
+  const [showMapPicker, setShowMapPicker] = useState(false);
 
   const load = async () => {
     try {
@@ -138,6 +153,21 @@ function AdminCctvPage() {
     await refreshDevices();
   };
 
+  // newLat/newLng stay strings (they back the text inputs and are optional for
+  // a camera); the map picker works in numbers, so translate at the boundary.
+  const pickedCameraLocation: LatLng | null = (() => {
+    const latNum = parseFloat(newLat);
+    const lngNum = parseFloat(newLng);
+    return Number.isFinite(latNum) && Number.isFinite(lngNum)
+      ? { lat: latNum, lng: lngNum }
+      : null;
+  })();
+
+  const applyPickedCameraLocation = (next: LatLng) => {
+    setNewLat(String(next.lat));
+    setNewLng(String(next.lng));
+  };
+
   const addCameraSlot = async () => {
     const label = newLabel.trim() || `camera-${deviceSlots.length + remoteCameras.length + 1}`;
     const labelTaken =
@@ -184,6 +214,9 @@ function AdminCctvPage() {
       setNewLat("");
       setNewLng("");
       setNewTiled(false);
+      // Collapse the map along with the rest of the form, so the next camera
+      // starts from a clean toolbar instead of a map still showing the last pin.
+      setShowMapPicker(false);
       toast.success("Camera registered — the server will start auto-scanning it shortly");
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to add camera"));
@@ -336,6 +369,14 @@ function AdminCctvPage() {
                   style={{ maxWidth: 110 }}
                   inputMode="decimal"
                 />
+                <button
+                  type="button"
+                  className="adm-camera-toggle"
+                  onClick={() => setShowMapPicker((v) => !v)}
+                  title="Pick the camera's position on a map instead of typing coordinates"
+                >
+                  {showMapPicker ? "Hide map" : "🗺️ Pick on map"}
+                </button>
                 <label className="adm-tiled-check" title="Also scan four overlapping tiles of each frame — finds small or distant plates a single pass misses and localizes plates more tightly, at roughly 1.6x the scan time">
                   <input type="checkbox" checked={newTiled} onChange={(e) => setNewTiled(e.target.checked)} />
                   Tiled scan
@@ -344,6 +385,19 @@ function AdminCctvPage() {
             )}
             <button className="add-btn" onClick={addCameraSlot}>+ Add Camera</button>
           </div>
+
+          {/* Full width below the toolbar rather than squeezed inside it, and
+              only for remote cameras — a device camera's position is wherever
+              the browser running it happens to be. */}
+          {newSourceType === "remote" && showMapPicker && (
+            <div className="adm-camera-map-picker">
+              <LocationPicker
+                value={pickedCameraLocation}
+                onChange={applyPickedCameraLocation}
+                height={260}
+              />
+            </div>
+          )}
 
           {deviceSlots.length === 0 && remoteCameras.length === 0 ? (
             <p className="adm-empty">No cameras added yet — add one above to start a live view.</p>
@@ -462,6 +516,9 @@ function DeviceCameraTile({
   const liveDetectRef = useRef(false);
   const inFlightRef = useRef(false);
   const [liveMatch, setLiveMatch] = useState<{ plateNumber: string; stolen: boolean } | null>(null);
+  // Every plate located in the current frame, each with its own cropped and
+  // enlarged image, so the operator can read them without squinting at the feed.
+  const [livePlates, setLivePlates] = useState<DetectedPlate[]>([]);
   // Resolved once when Live Detect is switched on, not per tick — a 1.5s loop
   // shouldn't re-prompt for permission or re-run the GPS fix.
   const geoRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -526,11 +583,10 @@ function DeviceCameraTile({
     if (blob) onScan(blob, `${slot.label}.jpg`);
   };
 
-  const drawBox = (
-    box: { x: number; y: number; width: number; height: number; confidence: number },
-    label: string,
-    stolen = false
-  ) => {
+  /** Outline every plate the service found in this frame, not just the best
+   *  one — a junction camera routinely sees several vehicles at once, and
+   *  boxing only one makes the others look undetected. */
+  const drawBoxes = (plates: DetectedPlate[], stolenText?: string) => {
     const video = videoRef.current;
     const canvas = overlayRef.current;
     if (!video || !canvas) return;
@@ -540,21 +596,29 @@ function DeviceCameraTile({
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const color = stolen ? "#ef4444" : "#22c55e";
-    const left = box.x - box.width / 2;
-    const top = box.y - box.height / 2;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(stolen ? 4 : 2, video.videoWidth / 240);
-    ctx.strokeRect(left, top, box.width, box.height);
+    for (const plate of plates) {
+      const box = plate.box;
+      if (!box) continue;
+      // Only the plate that actually matched a stolen vehicle turns red; the
+      // rest stay green even when they're in the same frame.
+      const stolen = Boolean(stolenText) && plate.text === stolenText;
+      const color = stolen ? "#ef4444" : "#22c55e";
+      const left = box.x - box.width / 2;
+      const top = box.y - box.height / 2;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(stolen ? 4 : 2, video.videoWidth / 240);
+      ctx.strokeRect(left, top, box.width, box.height);
 
-    const text = stolen ? `${label} — STOLEN` : `${label} (${box.confidence.toFixed(0)}%)`;
-    ctx.font = `${Math.max(14, video.videoWidth / 32)}px sans-serif`;
-    const textWidth = ctx.measureText(text).width + 10;
-    const labelTop = Math.max(0, top - 24);
-    ctx.fillStyle = color;
-    ctx.fillRect(left, labelTop, textWidth, 24);
-    ctx.fillStyle = "#0b0c14";
-    ctx.fillText(text, left + 5, labelTop + 17);
+      const label = plate.text || "plate";
+      const text = stolen ? `${label} — STOLEN` : `${label} (${box.confidence.toFixed(0)}%)`;
+      ctx.font = `${Math.max(14, video.videoWidth / 32)}px sans-serif`;
+      const textWidth = ctx.measureText(text).width + 10;
+      const labelTop = Math.max(0, top - 24);
+      ctx.fillStyle = color;
+      ctx.fillRect(left, labelTop, textWidth, 24);
+      ctx.fillStyle = "#0b0c14";
+      ctx.fillText(text, left + 5, labelTop + 17);
+    }
   };
 
   const runLiveDetectTick = async () => {
@@ -578,10 +642,24 @@ function DeviceCameraTile({
       if (res.data.detected) {
         setLiveText(res.data.text || "");
         setLiveMatch(res.data.match ?? null);
-        drawBox(res.data.box, res.data.text || "plate", Boolean(res.data.match?.stolen));
+        // Every plate in the frame gets boxed and popped up. Falls back to the
+        // single best read when `plates` is empty, which is what a full-frame
+        // fallback read returns (text, but no box to draw).
+        const found: DetectedPlate[] = res.data.plates?.length
+          ? res.data.plates
+          : res.data.cropImage || res.data.box
+            ? [{ box: res.data.box ?? null, text: res.data.text || "", textConfidence: res.data.textConfidence ?? 0, cropImage: res.data.cropImage ?? null }]
+            : [];
+        setLivePlates(found);
+        if (found.some((p) => p.box)) {
+          drawBoxes(found, res.data.match?.stolen ? res.data.text : undefined);
+        } else {
+          clearOverlay();
+        }
       } else {
         setLiveText("");
         setLiveMatch(null);
+        setLivePlates([]);
         clearOverlay();
       }
     } catch {
@@ -628,6 +706,25 @@ function DeviceCameraTile({
       <div className="adm-camera-video-wrap">
         <video ref={videoRef} className="adm-camera-video" muted playsInline />
         <canvas ref={overlayRef} className="adm-camera-overlay" />
+
+        {/* Every plate located in this frame, blown up over the feed. Each card
+            is the plate's own crop plus what it read, so several vehicles in
+            one frame each get their own readable panel. */}
+        {liveDetect && livePlates.some((p) => p.cropImage) && (
+          <div className="adm-plate-pops">
+            {livePlates
+              .filter((p) => p.cropImage)
+              .map((p, i) => {
+                const stolen = Boolean(liveMatch?.stolen) && p.text === liveText;
+                return (
+                  <div className={`adm-plate-pop ${stolen ? "adm-plate-pop-stolen" : ""}`} key={`${p.text}-${i}`}>
+                    <img src={p.cropImage as string} alt={p.text ? `Plate ${p.text}` : "Detected number plate"} />
+                    {p.text && <span className="adm-plate-pop-text">{p.text}</span>}
+                  </div>
+                );
+              })}
+          </div>
+        )}
       </div>
       {liveDetect && (
         <p className={`adm-camera-live-text ${liveMatch?.stolen ? "adm-camera-live-stolen" : ""}`}>
@@ -787,12 +884,18 @@ function RemoteCameraTile({
     try {
       const res = await api.post(`/cctv/cameras/${camera._id}/detect-preview`);
       if (!liveDetectRef.current) return; // stopped while this request was in flight
-      if (res.data.detected && res.data.box) {
+      if (res.data.detected) {
         const label = res.data.text || "plate";
         const stolen = Boolean(res.data.match?.stolen);
         setLiveText(label);
         setLiveMatch(res.data.match ?? null);
-        drawBox(res.data.box, res.data.frame, label, stolen);
+        // No box on a full-frame fallback read — the plate was recognised but
+        // not localized, so there's text to show and nothing to outline.
+        if (res.data.box) {
+          drawBox(res.data.box, res.data.frame, label, stolen);
+        } else {
+          clearOverlay();
+        }
       } else {
         setLiveText("");
         setLiveMatch(null);

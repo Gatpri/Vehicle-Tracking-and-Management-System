@@ -201,6 +201,78 @@
 @media (prefers-reduced-motion: reduce) {
   .adm-camera-live-text.adm-camera-live-stolen { animation: none; }
 }
+/* Row of zoomed plate crops along the bottom of the feed — one card per plate
+   found in the frame. Sits below the boxes the overlay draws, and scrolls
+   sideways rather than covering the video when a frame holds many vehicles. */
+.adm-plate-pops {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  pointer-events: none;
+  scrollbar-width: none;
+}
+.adm-plate-pops::-webkit-scrollbar { display: none; }
+
+.adm-plate-pop {
+  flex: 0 0 auto;
+  max-width: 46%;
+  padding: 5px;
+  border: 2px solid #22c55e;
+  border-radius: 6px;
+  background: rgba(6, 8, 15, 0.88);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  animation: adm-plate-pop-in 160ms ease-out;
+}
+.adm-plate-pop img {
+  display: block;
+  width: 100%;
+  max-height: 78px;
+  /* The crop is already upscaled server-side; keep the browser from softening
+     it further when it stretches to this box. */
+  object-fit: contain;
+  image-rendering: crisp-edges;
+  border-radius: 3px;
+}
+.adm-plate-pop-text {
+  display: block;
+  margin-top: 4px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #22c55e;
+}
+.adm-plate-pop-stolen { border-color: #ef4444; }
+.adm-plate-pop-stolen .adm-plate-pop-text { color: #fca5a5; }
+@keyframes adm-plate-pop-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adm-plate-pop { animation: none; }
+}
+
+/* Current manager of a workshop, shown above the assign/reassign control. */
+.adm-ws-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-bottom: 6px;
+}
+.adm-ws-manager-name { font-weight: 600; }
+.adm-ws-unassigned {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #fbbf24;
+}
+
 button.adm-live-on { background: #16a34a; }
 button.adm-live-on:hover { background: #15803d; }
 
@@ -476,6 +548,32 @@ button.adm-live-on:hover { background: #15803d; }
    text on the green fill. */
 .adm-camera-toggle.adm-live-on { background: #16a34a; border-color: #16a34a; color: #fff; }
 .adm-camera-toggle.adm-live-on:hover { background: #15803d; color: #fff; }
+
+/* LocationPicker ships a light palette (it's used on customer-facing pages);
+   restyle its chrome for this dark admin surface. The map tiles themselves
+   stay as-is — OSM has no dark variant here. */
+.adm-camera-map-picker { margin-top: 12px; max-width: 640px; }
+.adm-camera-map-picker .lp-search input,
+.adm-camera-map-picker .lp-gps {
+  background: #12131f;
+  border-color: #2a2d45;
+  color: #f4f4f4;
+}
+.adm-camera-map-picker .lp-search input::placeholder { color: #555; }
+.adm-camera-map-picker .lp-gps:hover:not(:disabled) {
+  background: #1a1c30;
+  border-color: #3a3d55;
+}
+.adm-camera-map-picker .lp-results {
+  background: #12131f;
+  border-color: #2a2d45;
+}
+.adm-camera-map-picker .lp-results li + li { border-top-color: #2a2d45; }
+.adm-camera-map-picker .lp-results button { color: #f4f4f4; }
+.adm-camera-map-picker .lp-results button:hover { background: #1a1c30; }
+.adm-camera-map-picker .lp-map { border-color: #2a2d45; }
+.adm-camera-map-picker .lp-coords { background: #1a1c30; color: #f4f4f4; }
+.adm-camera-map-picker .lp-address { color: #8a8fa8; }
 .adm-camera-remote-badge {
   font-style: normal;
   font-size: 10.5px;

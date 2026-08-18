@@ -56,14 +56,11 @@ function AdminLayout({ children }: { children: ReactNode }) {
         </div>
       </div>
 
+      {/* No Home link: /home is customer-only (CUSTOMER_ROLES in App.tsx), so
+          for every role that reaches this layout the link would be bounced
+          straight back here. The first nav link below is this role's own
+          landing page — see landingPathFor in lib/roles.ts. */}
       <nav className="admin-subnav">
-        <NavLink
-          to="/home"
-          end
-          className={({ isActive }) => `admin-subnav-link ${isActive ? "active" : ""}`}
-        >
-          Home
-        </NavLink>
         {links.map((link) => (
           <NavLink
             key={link.to}

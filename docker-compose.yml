@@ -74,7 +74,12 @@ services:
       # to boot without it rather than fall back to a secret committed to the repo.
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see .env)}
       
-      # Sentiment Service URL (points to ANPR service)
+      # Both live in the same sidecar (anpr_service), but they're read by two
+      # different modules — services/anprService.js and services/sentimentService.js
+      # — each with its own env var and its own 127.0.0.1 default. Setting only
+      # one leaves the other pointing at localhost, which inside this container
+      # is the backend itself, so plate detection silently fails with ECONNREFUSED.
+      ANPR_SERVICE_URL: http://anpr_service:8000
       SENTIMENT_SERVICE_URL: http://anpr_service:8000
       
       # Gmail SMTP

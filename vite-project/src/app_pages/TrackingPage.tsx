@@ -8,7 +8,7 @@ import icon from "leaflet/dist/images/marker-icon.png";
 import shadow from "leaflet/dist/images/marker-shadow.png";
 import "leaflet/dist/leaflet.css";
 import api, { getErrorMessage } from "../lib/api";
-import { getSocket } from "../lib/socket";
+import { getSocket, subscribeWithReconnect } from "../lib/socket";
 
 // Vite/webpack break Leaflet's default marker icon URL resolution — the
 // standard fix is to re-point it at the bundled asset URLs explicitly.
@@ -56,15 +56,18 @@ function TrackingPage() {
     load();
 
     const socket = getSocket();
-    socket.emit("tracking:subscribe", vehicleId, (ack: { success: boolean; message?: string }) => {
-      if (!ack?.success) console.warn("tracking:subscribe failed:", ack?.message);
-    });
+    // Re-subscribes on reconnect — server-side rooms are per-connection, so a
+    // one-shot emit goes silent after any network drop.
+    const unsubscribe = subscribeWithReconnect("tracking:subscribe", vehicleId, (message) =>
+      console.warn("tracking:subscribe failed:", message)
+    );
     const onUpdate = (point: LocationPoint) => {
       setLatest(point);
       setHistory((prev) => [...prev, point]);
     };
     socket.on("tracking:update", onUpdate);
     return () => {
+      unsubscribe();
       socket.off("tracking:update", onUpdate);
     };
   }, [vehicleId]);

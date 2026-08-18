@@ -7,6 +7,7 @@ import { rankWorkshops, sortWorkshops } from "../services/pricingService.js";
 import { haversineDistanceKm } from "../utils/geo.js";
 import { uploadImage } from "../services/cloudinaryService.js";
 import { VEHICLE_BRANDS, BIKE_TYPES } from "../constants/workshopOptions.js";
+import { hasPermission } from "../policies/permissions.js";
 
 // Normalizes either a comma-separated query param ("Yamaha,KTM") or a JSON
 // body array into a clean list, dropping anything not in the allowed set so a
@@ -71,7 +72,14 @@ export const listWorkshops = async (req, res) => {
     if (brandFilter.length) filter.brandsSupported = { $in: brandFilter };
     if (typeFilter.length) filter.bikeTypes = { $in: typeFilter };
 
-    const workshops = await Workshop.find(filter).lean();
+    // Who manages each garage is admin-facing detail: it carries a staff
+    // member's name and email, so it is only populated for callers allowed to
+    // change the assignment. Everyone else gets the bare managedBy id exactly
+    // as before.
+    const canSeeManager = req.user && hasPermission(req.user.role, "workshop:update", req.user.permissions);
+    const query = Workshop.find(filter);
+    if (canSeeManager) query.populate("managedBy", "firstname lastname email role");
+    const workshops = await query.lean();
 
     // Distance is computed here rather than in Mongo: the collection is small,
     // and a $geoNear would mean reindexing location as GeoJSON.

@@ -6,7 +6,7 @@ import icon from "leaflet/dist/images/marker-icon.png";
 import shadow from "leaflet/dist/images/marker-shadow.png";
 import "leaflet/dist/leaflet.css";
 import api from "../lib/api";
-import { getSocket } from "../lib/socket";
+import { getSocket, subscribeWithReconnect } from "../lib/socket";
 
 // Vite/webpack break Leaflet's default marker icon URL resolution — the
 // standard fix is to re-point it at the bundled asset URLs explicitly.
@@ -135,9 +135,12 @@ function LiveDeliveryMap({ deliveryId, fixedPoints = [], destination, height = 3
     load();
 
     const socket = getSocket();
-    socket.emit("delivery:subscribe", deliveryId, (ack: { success: boolean; message?: string }) => {
-      if (!ack?.success) console.warn("delivery:subscribe failed:", ack?.message);
-    });
+    // Re-subscribes on every reconnect: room membership is per-connection
+    // server-side, so a plain one-shot emit stops delivering updates after the
+    // first network blip (or after the staff's leg starts later in the session).
+    const unsubscribe = subscribeWithReconnect("delivery:subscribe", deliveryId, (message) =>
+      console.warn("delivery:subscribe failed:", message)
+    );
     const onUpdate = (point: LocationPoint) => {
       setLatest(point);
       setHistory((prev) => [...prev, point]);
@@ -145,6 +148,7 @@ function LiveDeliveryMap({ deliveryId, fixedPoints = [], destination, height = 3
     socket.on("delivery:update", onUpdate);
     return () => {
       cancelled = true;
+      unsubscribe();
       socket.off("delivery:update", onUpdate);
     };
   }, [deliveryId]);

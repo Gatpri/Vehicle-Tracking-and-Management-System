@@ -27,6 +27,26 @@ const token = authHeader.split(" ")[1];
   }
 };
 
+// Identify the caller when they present a valid token, but let anonymous
+// requests through untouched. For endpoints that serve both the public site
+// and the admin area from one route: the controller decides what extra fields
+// a privileged caller gets, instead of the route being either fully public or
+// fully closed. A bad or expired token is treated as "not signed in" rather
+// than an error — the endpoint works either way, so there is nothing to fail.
+export const attachUserIfPresent = async (req, _res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return next();
+
+  try {
+    const decoded = jwt.verify(authHeader.split(" ")[1], JWT_SECRET);
+    const user = await User.findOne({ email: decoded.email }).select("-password");
+    if (user) req.user = user;
+  } catch {
+    // Anonymous is a valid state here.
+  }
+  next();
+};
+
 // Check role
 export const requireRole = (...roles) => {
   return (req, res, next) => {

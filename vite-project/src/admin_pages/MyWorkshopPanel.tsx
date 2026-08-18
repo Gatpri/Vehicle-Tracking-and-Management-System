@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { VEHICLE_BRANDS, BIKE_TYPES } from "../lib/workshopOptions";
 import ServicesTableEditor, { type ServiceRow } from "../components/ServicesTableEditor";
+import LocationPicker, { type LatLng } from "../components/LocationPicker";
 
 interface Workshop {
   _id: string;
@@ -136,21 +137,20 @@ function MyWorkshopPanel({
     }
   };
 
-  // Fills lat/lng from the browser — a garage owner knows where they are, not
-  // what their coordinates are.
-  const useCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error("Geolocation isn't available in this browser");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLat(String(pos.coords.latitude));
-        setLng(String(pos.coords.longitude));
-        toast.info("Coordinates filled from your current location — save to apply");
-      },
-      () => toast.error("Couldn't get your location — check browser permissions")
-    );
+  // lat/lng stay strings (they back plain text inputs and the save payload);
+  // the map picker works in numbers, so translate at the boundary. Half-typed
+  // or empty fields simply mean "no pin yet" rather than a NaN marker.
+  const pickedLocation: LatLng | null = (() => {
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    return Number.isFinite(latNum) && Number.isFinite(lngNum)
+      ? { lat: latNum, lng: lngNum }
+      : null;
+  })();
+
+  const applyPickedLocation = (next: LatLng) => {
+    setLat(String(next.lat));
+    setLng(String(next.lng));
   };
 
   if (loading) return <p className="adm-empty">Loading...</p>;
@@ -206,13 +206,22 @@ function MyWorkshopPanel({
           value={area}
           onChange={(e) => setArea(e.target.value)}
         />
+        <LocationPicker
+          value={pickedLocation}
+          onChange={applyPickedLocation}
+          onAddressResolved={(resolved) => {
+            // Only offer the looked-up address as a default — never overwrite
+            // an address the owner has already written themselves.
+            if (!address.trim()) setAddress(resolved);
+          }}
+        />
         <div className="adm-ws-coords">
           <input placeholder="Latitude" inputMode="decimal" value={lat} onChange={(e) => setLat(e.target.value)} required />
           <input placeholder="Longitude" inputMode="decimal" value={lng} onChange={(e) => setLng(e.target.value)} required />
-          <button type="button" className="adm-camera-toggle" onClick={useCurrentLocation}>Use my location</button>
         </div>
         <span className="adm-ws-hint">
           Coordinates drive "nearest workshop" search — update them if you move premises.
+          The boxes above stay in sync with the pin, so you can also paste exact values.
         </span>
       </div>
 

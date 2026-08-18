@@ -10,6 +10,7 @@ Also provides LLM-based sentiment analysis using Gemini Flash 2.5 with Mistral f
 
   python server.py            # http://127.0.0.1:8000
 """
+import base64
 import os
 import threading
 from pathlib import Path
@@ -180,6 +181,46 @@ def read_plate(model, plate_img, conf):
     return " ".join(tokens), (sum(confs) / len(confs) if confs else 0.0)
 
 
+# Display size for the plate crop sent back to the UI. This is presentation
+# only — it is deliberately NOT applied before the character reader.
+#
+# Measured on a real plate downscaled to 80/120/160/240px wide: pre-upscaling
+# the crop changed mean confidence by roughly +/-1% and at 120px it actually
+# dropped a character ("Ga 6 5 Pa 2 1 9 0" -> "6 5 Pa 2 1 9 0"). YOLO already
+# letterboxes its input to imgsz internally, so resampling first just adds
+# interpolation artefacts for it to chew through. Zooming helps a human read a
+# distant plate; it does not help this model.
+CROP_DISPLAY_MIN_W = 320
+CROP_DISPLAY_MAX_SCALE = 6.0
+
+
+def upscale_for_display(crop):
+    """Enlarge a small plate crop so a person can actually see it in the UI.
+
+    Returns the crop unchanged when it is already large enough.
+    """
+    h, w = crop.shape[:2]
+    if w == 0 or h == 0 or w >= CROP_DISPLAY_MIN_W:
+        return crop
+    scale = min(CROP_DISPLAY_MIN_W / w, CROP_DISPLAY_MAX_SCALE)
+    return cv2.resize(crop, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
+
+
+def encode_crop(crop):
+    """JPEG-encode a plate crop as a data URI for display in the browser.
+
+    Returns None on failure — the crop is a nicety, never a reason to fail a
+    read that otherwise succeeded.
+    """
+    try:
+        ok, buf = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        if not ok:
+            return None
+        return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode("ascii")
+    except Exception:
+        return None
+
+
 def read_best(crop, char_conf):
     """Primary 38-class Devanagari reader, with the unified 57-class model
     challenging it when the read looks like an embossed (Latin) plate."""
@@ -240,6 +281,10 @@ def analyze(body, plate_conf, char_conf, imgsz, tiles):
                 },
                 "text": text,
                 "textConfidence": text_conf * 100,
+                # The located plate on its own, enlarged for legibility, so the
+                # UI can show what was read rather than asking the operator to
+                # squint at a box on the full frame.
+                "cropImage": encode_crop(upscale_for_display(crop)),
             })
 
     if not plates:
@@ -248,12 +293,26 @@ def analyze(body, plate_conf, char_conf, imgsz, tiles):
         # usually is. Read the whole image instead of giving up.
         with infer_lock:
             text, text_conf = read_best(frame, char_conf)
+
+        # A successful full-frame read IS a detection: the characters were
+        # recognised, only the locating box is missing. Reporting False here
+        # made every consumer discard the text — cctvController returns early
+        # on `!read.detected`, so a correctly-read plate never reached the UI.
+        #
+        # Requires BOTH readable characters and non-zero confidence: some
+        # frames come back with whitespace-only text at 0.0 confidence, which
+        # is the reader finding nothing, not a plate. Blank and noise frames
+        # score 0.0 here, so junk still reports False.
+        cleaned = text.strip()
         return {
-            "detected": False,
+            "detected": bool(cleaned) and text_conf > 0,
             "box": None,
             "text": text,
             "textConfidence": text_conf * 100,
             "plates": [],
+            # No located plate to crop — the whole frame was the "crop", and
+            # echoing it back would just resend the image the caller uploaded.
+            "cropImage": None,
             "frame": frame_size,
         }
 

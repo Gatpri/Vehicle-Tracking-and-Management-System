@@ -1,0 +1,165 @@
+.lp-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+/* --- toolbar: search + GPS --- */
+.lp-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.lp-search {
+  position: relative;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.lp-search input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.lp-search input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.lp-spinner {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: lp-spin 0.7s linear infinite;
+}
+
+@keyframes lp-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Sits above Leaflet panes, which use z-index up to 800. */
+.lp-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.lp-results li + li { border-top: 1px solid #f1f5f9; }
+
+.lp-results button {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #0f172a;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.lp-results button:hover { background: #f1f5f9; }
+
+.lp-gps {
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  color: #0f172a;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.lp-gps:hover:not(:disabled) { background: #f8fafc; border-color: #94a3b8; }
+.lp-gps:disabled { opacity: 0.6; cursor: default; }
+
+/* --- map --- */
+.lp-map {
+  position: relative;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.lp-map .leaflet-container {
+  /* Leaflet's default grab cursor implies panning only; the crosshair signals
+     that clicking places the pin. */
+  cursor: crosshair;
+}
+
+.lp-map .leaflet-marker-draggable { cursor: grab; }
+.lp-map .leaflet-marker-draggable:active { cursor: grabbing; }
+
+.lp-hint-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 500;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #fff;
+  font-size: 13px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* --- footer --- */
+.lp-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.lp-coords {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #0f172a;
+  background: #f1f5f9;
+  padding: 2px 7px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+
+.lp-address {
+  color: #64748b;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+@media (max-width: 520px) {
+  .lp-gps { flex: 1 1 100%; }
+}

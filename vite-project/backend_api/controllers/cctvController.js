@@ -163,11 +163,14 @@ export const detectPreview = async (req, res) => {
       sightingId = sighting._id;
     }
 
-    // The overlay draws a box, so a full-frame fallback read has nothing to
-    // show even when it produced text — only a localized plate is previewable.
+    // Nothing read at all — no text, no box, nothing to show.
     if (!read.detected) {
       return res.json({ success: true, detected: false });
     }
+
+    // A full-frame fallback read has text but no box (the plate was recognised
+    // without being localized). That's still a detection worth showing, so it
+    // is returned with box: null and the client skips only the overlay.
 
     res.json({
       success: true,
@@ -176,6 +179,14 @@ export const detectPreview = async (req, res) => {
       text: read.text,
       textConfidence: read.textConfidence,
       frame: read.frame,
+      // The located plate, cropped and upscaled exactly as the character
+      // reader saw it, so the operator can check the read against the pixels
+      // it came from. Null on a full-frame fallback read (nothing to crop).
+      cropImage: read.cropImage ?? null,
+      // Every plate in the frame, not just the best-scoring one. A junction
+      // camera routinely sees several vehicles at once, and the overlay boxes
+      // and pops up each of them. Empty on a full-frame fallback read.
+      plates: Array.isArray(read.plates) ? read.plates : [],
       match: matchedVehicle
         ? { plateNumber: matchedVehicle.plateNumber, stolen: matchedStolen, sightingId }
         : null,

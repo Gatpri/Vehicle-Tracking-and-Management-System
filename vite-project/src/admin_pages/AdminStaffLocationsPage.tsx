@@ -7,7 +7,7 @@ import icon from "leaflet/dist/images/marker-icon.png";
 import shadow from "leaflet/dist/images/marker-shadow.png";
 import "leaflet/dist/leaflet.css";
 import api from "../lib/api";
-import { getSocket } from "../lib/socket";
+import { getSocket, subscribeWithReconnect } from "../lib/socket";
 
 // Same Vite marker-icon fix as LiveDeliveryMap.tsx — safe to run twice, it's
 // a one-time global side effect on Leaflet's default icon config.
@@ -57,9 +57,11 @@ function AdminStaffLocationsPage() {
       .finally(() => setLoading(false));
 
     const socket = getSocket();
-    socket.emit("staff:subscribe-locations", null, (ack: { success: boolean }) => {
-      if (!ack?.success) console.warn("staff:subscribe-locations failed");
-    });
+    // Re-subscribes on reconnect — server-side rooms are per-connection, so a
+    // one-shot emit goes silent after any network drop.
+    const unsubscribe = subscribeWithReconnect("staff:subscribe-locations", null, () =>
+      console.warn("staff:subscribe-locations failed")
+    );
     const onLocation = (p: { staffId: string; lat: number; lng: number; recordedAt: string }) => {
       setStaff((prev) => prev.map((s) => (s.staffId === p.staffId ? { ...s, lat: p.lat, lng: p.lng, lastSeenAt: p.recordedAt } : s)));
     };
@@ -69,6 +71,7 @@ function AdminStaffLocationsPage() {
     socket.on("staff:location", onLocation);
     socket.on("staff:offline", onOffline);
     return () => {
+      unsubscribe();
       socket.off("staff:location", onLocation);
       socket.off("staff:offline", onOffline);
     };

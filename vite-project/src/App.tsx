@@ -16,6 +16,7 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 import ProtectedRoute from './components/ProtectedRoute';
+import { getCurrentUser, getToken } from './lib/useAuth';
 import AppLayout from './components/AppLayout';
 import AdminLayout from './components/AdminLayout';
 import StaffLayout from './components/StaffLayout';
@@ -61,9 +62,22 @@ import {
   DELIVERY_ADMIN_ROLE,
   DELIVERY_MANAGE_ROLES,
   STAFF_LOCATION_VIEWER_ROLES,
+  CUSTOMER_ROLES,
   landingPathFor,
 } from './lib/roles';
 
+
+/**
+ * Terminal destination for unmatched URLs. Reads the stored session directly
+ * rather than going through ProtectedRoute: there is no page to protect here,
+ * only a decision about where an unknown path should send someone.
+ */
+function CatchAllRedirect() {
+  const user = getCurrentUser();
+  const token = getToken();
+  if (!user || !token) return <Navigate to="/login" replace />;
+  return <Navigate to={landingPathFor(user.role)} replace />;
+}
 
 function App(){
   const navigate = useNavigate();
@@ -108,13 +122,18 @@ function App(){
     aria-label="notifications" />
 <Routes>
 
-   <Route path="/" element={<Home />} />
+{/* The customer home page. Guarded like every other page rather than left
+    open: without ProtectedRoute, typing /home or / reached the customer shell
+    directly — no session needed, and any staff role landed in an app shell
+    whose every link would bounce them. CUSTOMER_ROLES keeps it to customers,
+    and staff are redirected to their own landing page by landingPathFor. */}
+<Route path="/" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><Home /></ProtectedRoute>}/>
   <Route path = "/signin" element={<Signin />}/>
 <Route path = "/login" element={<Login />}/>
 <Route path = "/recover" element={<Recover />}/>
 <Route path = "/reset-password" element={<ResetPassword/>}/>
 <Route path = "/email-verified" element={<EmailVerified/>}/>
-<Route path = "/home" element={<Home />}/>
+<Route path="/home" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><Home /></ProtectedRoute>}/>
 
 {/* Platform administration — full admins only. */}
 <Route path="/dashboard" element={<ProtectedRoute allowedRoles={FULL_ADMIN_ROLES}><AdminLayout><Dashboard/></AdminLayout></ProtectedRoute>}/>
@@ -142,20 +161,34 @@ function App(){
     shows the signed-in user's own balance. */}
 <Route path="/admin/my-wallet" element={<ProtectedRoute allowedRoles={ADMIN_AREA_ROLES}><AdminLayout><AdminMyWalletPage/></AdminLayout></ProtectedRoute>}/>
 
-<Route path="/vehicles" element={<ProtectedRoute><AppLayout><VehiclesPage/></AppLayout></ProtectedRoute>}/>
-<Route path="/vehicles/:id" element={<ProtectedRoute><AppLayout><VehicleDetailPage/></AppLayout></ProtectedRoute>}/>
-<Route path="/vehicles/:vehicleId/history" element={<ProtectedRoute><AppLayout><ServiceHistoryPage/></AppLayout></ProtectedRoute>}/>
-<Route path="/workshops" element={<ProtectedRoute><AppLayout><WorkshopsPage/></AppLayout></ProtectedRoute>}/>
-<Route path="/workshops/:id" element={<ProtectedRoute><AppLayout><WorkshopDetailPage/></AppLayout></ProtectedRoute>}/>
-<Route path="/bookings" element={<ProtectedRoute><AppLayout><BookingsPage/></AppLayout></ProtectedRoute>}/>
-<Route path="/tracking/:vehicleId" element={<ProtectedRoute><AppLayout><TrackingPage/></AppLayout></ProtectedRoute>}/>
-<Route path="/wallet" element={<ProtectedRoute><AppLayout><WalletPage/></AppLayout></ProtectedRoute>}/>
-<Route path="/chat" element={<ProtectedRoute><AppLayout><ChatPage/></AppLayout></ProtectedRoute>}/>
-<Route path="/sos" element={<ProtectedRoute><AppLayout><SosPage/></AppLayout></ProtectedRoute>}/>
-<Route path="/safety" element={<ProtectedRoute><AppLayout><SafetyPage/></AppLayout></ProtectedRoute>}/>
+{/* The customer app. Every page here is CUSTOMER_ROLES-only for the same
+    reason as /home above — these are the pages the home page links to, so
+    leaving them open to any signed-in role would just move the hole one URL
+    along. Staff who land here are redirected to their own area. */}
+<Route path="/vehicles" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><VehiclesPage/></AppLayout></ProtectedRoute>}/>
+<Route path="/vehicles/:id" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><VehicleDetailPage/></AppLayout></ProtectedRoute>}/>
+<Route path="/vehicles/:vehicleId/history" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><ServiceHistoryPage/></AppLayout></ProtectedRoute>}/>
+<Route path="/workshops" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><WorkshopsPage/></AppLayout></ProtectedRoute>}/>
+<Route path="/workshops/:id" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><WorkshopDetailPage/></AppLayout></ProtectedRoute>}/>
+<Route path="/bookings" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><BookingsPage/></AppLayout></ProtectedRoute>}/>
+<Route path="/tracking/:vehicleId" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><TrackingPage/></AppLayout></ProtectedRoute>}/>
+<Route path="/wallet" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><WalletPage/></AppLayout></ProtectedRoute>}/>
+<Route path="/chat" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><ChatPage/></AppLayout></ProtectedRoute>}/>
+<Route path="/sos" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><SosPage/></AppLayout></ProtectedRoute>}/>
+<Route path="/safety" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><SafetyPage/></AppLayout></ProtectedRoute>}/>
 
 {/* Delivery-staff: a field-worker role with its own minimal layout. */}
 <Route path="/staff/deliveries" element={<ProtectedRoute allowedRoles={[DELIVERY_STAFF_ROLE]}><StaffLayout><DeliveryDashboardPage/></StaffLayout></ProtectedRoute>}/>
+{/* Delivery-staff earnings. Reuses AdminMyWalletPage — same endpoints, same
+    feature as the customer /wallet page — so a courier checking their takings
+    stays inside StaffLayout instead of being sent out to the customer site. */}
+<Route path="/staff/earnings" element={<ProtectedRoute allowedRoles={[DELIVERY_STAFF_ROLE]}><StaffLayout><AdminMyWalletPage/></StaffLayout></ProtectedRoute>}/>
+
+{/* Anything unmatched. Without this, a typo'd URL matched no route and React
+    Router rendered an empty page, which reads as a broken app. Route it
+    through the same guard as everything else: signed-in users go to their own
+    landing page, everyone else to /login. */}
+<Route path="*" element={<CatchAllRedirect/>}/>
 </Routes>
 </>
   );

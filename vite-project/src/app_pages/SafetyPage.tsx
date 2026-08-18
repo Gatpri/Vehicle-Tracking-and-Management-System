@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
+import LocationPicker, { type LatLng } from "../components/LocationPicker";
 
 // One cluster of nearby incidents, not one incident — the backend groups them
 // by proximity so a repeatedly-hit spot reads hotter than a one-off.
@@ -41,6 +42,12 @@ function SafetyPage() {
   const [vehicleId, setVehicleId] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Where the vehicle was taken from — which is rarely where the owner is
+  // standing when they file, so this is picked on a map rather than read from
+  // the device. Null until they choose; "My location" in the picker is one of
+  // the ways to fill it, not the only one.
+  const [location, setLocation] = useState<LatLng | null>(null);
+  const [locationLabel, setLocationLabel] = useState("");
 
   const load = async () => {
     try {
@@ -66,41 +73,35 @@ function SafetyPage() {
     initial();
   }, []);
 
-  const handleReport = (e: FormEvent) => {
+  const handleReport = async (e: FormEvent) => {
     e.preventDefault();
     if (!vehicleId) {
       toast.error("Select a vehicle");
       return;
     }
-    if (!navigator.geolocation) {
-      toast.error("Geolocation isn't available in this browser");
+    if (!location) {
+      toast.error("Mark on the map where the vehicle was last seen");
       return;
     }
     setSubmitting(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          await api.post("/theft-reports", {
-            vehicleId,
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            description,
-          });
-          toast.success("Theft report filed — vehicle flagged as stolen");
-          setDescription("");
-          setShowForm(false);
-          load();
-        } catch (err) {
-          toast.error(getErrorMessage(err, "Failed to file report"));
-        } finally {
-          setSubmitting(false);
-        }
-      },
-      () => {
-        toast.error("Couldn't get your location — check browser permissions");
-        setSubmitting(false);
-      }
-    );
+    try {
+      await api.post("/theft-reports", {
+        vehicleId,
+        lat: location.lat,
+        lng: location.lng,
+        description,
+      });
+      toast.success("Theft report filed — vehicle flagged as stolen");
+      setDescription("");
+      setLocation(null);
+      setLocationLabel("");
+      setShowForm(false);
+      load();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to file report"));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (loading) return <div className="uh-page"><p>Loading...</p></div>;
@@ -130,11 +131,21 @@ function SafetyPage() {
             </div>
           </div>
           <div className="uh-field">
+            <label>Where was it last seen?</label>
+            <LocationPicker
+              value={location}
+              onChange={setLocation}
+              onAddressResolved={setLocationLabel}
+              height={280}
+            />
+            {locationLabel && <span className="ap-row-sub">{locationLabel}</span>}
+          </div>
+          <div className="uh-field">
             <label htmlFor="description">Description</label>
             <textarea id="description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
-          <button className="uh-btn uh-btn-danger" type="submit" disabled={submitting}>
-            {submitting ? "Filing..." : "File Report (uses my current location)"}
+          <button className="uh-btn uh-btn-danger" type="submit" disabled={submitting || !location}>
+            {submitting ? "Filing..." : "File Report"}
           </button>
         </form>
       )}
