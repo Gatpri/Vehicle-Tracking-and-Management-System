@@ -126,6 +126,10 @@ export const deleteVehicle = async (req, res) => {
 //
 // `kind` selects which: "plate" replaces the single plate photo, anything else
 // appends to the vehicle gallery.
+/** Angles each photo kind accepts. A plate has two faces; a vehicle has four. */
+const PLATE_ANGLES = ["front", "back"];
+const VEHICLE_ANGLES = ["front", "back", "left", "right"];
+
 export const uploadVehiclePhoto = async (req, res) => {
   try {
     if (!req.file) {
@@ -139,8 +143,30 @@ export const uploadVehiclePhoto = async (req, res) => {
     }
 
     const url = await uploadImage(req.file.buffer, "vehicle-photos");
-    if (req.body.kind === "plate") vehicle.plateImageUrl = url;
-    else vehicle.images.push(url);
+    const { kind, angle } = req.body;
+
+    // An angle turns this into a slot rather than an append: re-uploading the
+    // "front" plate replaces the front plate instead of leaving two fronts.
+    if (angle) {
+      const field = kind === "plate" ? "plateImages" : "vehicleImages";
+      const allowed = kind === "plate" ? PLATE_ANGLES : VEHICLE_ANGLES;
+      if (!allowed.includes(angle)) {
+        return res.status(400).json({
+          success: false,
+          message: `angle must be one of: ${allowed.join(", ")}`,
+        });
+      }
+      const existing = vehicle[field].find((p) => p.angle === angle);
+      if (existing) existing.url = url;
+      else vehicle[field].push({ url, angle });
+      // The gallery still backs the older clients that read images[].
+      if (kind !== "plate") vehicle.images.push(url);
+      vehicle.markModified(field);
+    } else if (kind === "plate") {
+      vehicle.plateImageUrl = url;
+    } else {
+      vehicle.images.push(url);
+    }
     await vehicle.save();
 
     res.status(201).json({ success: true, vehicle });
@@ -159,8 +185,17 @@ export const deleteVehiclePhoto = async (req, res) => {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
-    if (kind === "plate") vehicle.plateImageUrl = "";
-    else vehicle.images = vehicle.images.filter((i) => i !== url);
+    if (kind === "plate") {
+      vehicle.plateImages = vehicle.plateImages.filter((p) => p.url !== url);
+      vehicle.markModified("plateImages");
+      // Only clear the legacy field if it was pointing at the removed photo;
+      // the pre-save hook then repoints it at whatever plate shot remains.
+      if (vehicle.plateImageUrl === url) vehicle.plateImageUrl = "";
+    } else {
+      vehicle.images = vehicle.images.filter((i) => i !== url);
+      vehicle.vehicleImages = vehicle.vehicleImages.filter((p) => p.url !== url);
+      vehicle.markModified("vehicleImages");
+    }
     await vehicle.save();
 
     res.json({ success: true, vehicle });

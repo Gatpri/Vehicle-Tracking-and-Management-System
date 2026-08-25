@@ -3,7 +3,7 @@ import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { VEHICLE_BRANDS, BIKE_TYPES } from "../lib/workshopOptions";
 import { isWorkshopAdmin } from "../lib/roles";
-import { getCurrentUser } from "../lib/useAuth";
+import { useAuth } from "../lib/AuthContext";
 import MyWorkshopPanel from "./MyWorkshopPanel";
 import WorkshopReviewsPanel from "./WorkshopReviewsPanel";
 import ServicesTableEditor, { type ServiceRow } from "../components/ServicesTableEditor";
@@ -52,7 +52,7 @@ function AdminWorkshopsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRows, setEditRows] = useState<ServiceRow[]>([]);
   const [savingServices, setSavingServices] = useState(false);
-  const currentUser = getCurrentUser();
+  const { user: currentUser } = useAuth();
   // Email of the account being assigned as manager, keyed by workshop id.
   const [managerEmail, setManagerEmail] = useState<Record<string, string>>({});
   const [assigningId, setAssigningId] = useState<string | null>(null);

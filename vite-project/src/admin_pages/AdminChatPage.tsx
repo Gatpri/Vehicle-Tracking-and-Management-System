@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { getSocket } from "../lib/socket";
-import { getCurrentUser } from "../lib/useAuth";
+import { useAuth } from "../lib/AuthContext";
+import { MessageBubble, type ChatMessage as Message } from "../components/MessageBubble";
 import "./AdminPages.css";
 
 interface Participant {
@@ -15,13 +16,16 @@ interface Conversation {
   _id: string;
   participants: Participant[];
   lastMessageAt: string;
-}
-interface Message {
-  _id: string;
-  conversation: string;
-  sender: string;
-  text: string;
-  createdAt: string;
+  /**
+   * Server-computed name, present on channel threads (Customer Support,
+   * Vehicle Tracking, a workshop, a regional delivery thread). Those have only
+   * the owner as a participant, so there is no "other party" to name them
+   * after — and on this side the label names the person who wrote in.
+   */
+  label?: string | null;
+  channel?: string | null;
+  /** Who opened the thread. Only set on channel threads. */
+  owner?: Participant | null;
 }
 interface StaffMember {
   _id: string;
@@ -38,10 +42,9 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 function AdminChatPage() {
-  const me = getCurrentUser();
-  // The stored user object uses "id" (that's what login/google-auth return),
-  // not "_id" — comparing against the wrong field silently always fails.
-  const myId = me?._id ?? me?.id;
+  const { user: me } = useAuth();
+  // /api/me returns the id as "id", not "_id".
+  const myId = me?.id;
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -99,15 +102,40 @@ function AdminChatPage() {
       // Bump whichever conversation just got a message to the top of the list.
       loadConversations();
     };
+    // An edit or an unsend replaces a message in place rather than appending.
+    const onUpdated = (msg: Message) => {
+      setMessages((prev) => prev.map((m) => (m._id === msg._id ? msg : m)));
+    };
     socket.on("message:new", onMessage);
+    socket.on("message:updated", onUpdated);
     return () => {
       socket.off("message:new", onMessage);
+      socket.off("message:updated", onUpdated);
     };
   }, [activeId]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
+
+  const submitEdit = async (id: string, newText: string) => {
+    try {
+      await api.patch(`/chat/messages/${id}`, { text: newText });
+      // No local update: the server broadcasts "message:updated", which the
+      // listener above applies.
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't edit that message"));
+    }
+  };
+
+  const unsend = async (id: string) => {
+    if (!window.confirm("Unsend this message? Others will see that it was deleted.")) return;
+    try {
+      await api.delete(`/chat/messages/${id}`);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't unsend that message"));
+    }
+  };
 
   const openConversation = async (id: string) => {
     setActiveId(id);
@@ -141,16 +169,25 @@ function AdminChatPage() {
     c.participants.find((p) => p._id !== myId) || c.participants[0];
 
   const conversationLabel = (c: Conversation) => {
+    // Channel threads carry a server-computed label ("Ram Thapa — Support"),
+    // since their only participant is the owner.
+    if (c.label) return c.label;
     const other = otherParty(c);
     return other ? `${other.firstname} ${other.lastname}` : "Conversation";
   };
+
+  /**
+   * The role to show beside a thread. On a channel thread the counterpart is
+   * the owner rather than a second participant.
+   */
+  const counterpartRole = (c: Conversation) => c.owner?.role ?? otherParty(c)?.role;
 
   // Staff threads are ones this account can start; user threads only ever
   // exist because the owner wrote in first, which is why they get the
   // "they'll show up once they message you" empty state and staff don't.
   const isStaff = (role?: string) => Boolean(role) && role !== "user";
-  const staffThreads = conversations.filter((c) => isStaff(otherParty(c)?.role));
-  const userThreads = conversations.filter((c) => !isStaff(otherParty(c)?.role));
+  const staffThreads = conversations.filter((c) => isStaff(counterpartRole(c)));
+  const userThreads = conversations.filter((c) => !isStaff(counterpartRole(c)));
 
   const rolesAvailable = [...new Set(staff.map((s) => s.role))];
   const peopleInRole = staff.filter((s) => s.role === newRole);
@@ -237,7 +274,7 @@ function AdminChatPage() {
                 onClick={() => openConversation(c._id)}
               >
                 {conversationLabel(c)}
-                <em className="adm-chat-role">{ROLE_LABELS[otherParty(c)?.role ?? ""] ?? otherParty(c)?.role}</em>
+                <em className="adm-chat-role">{ROLE_LABELS[counterpartRole(c) ?? ""] ?? counterpartRole(c)}</em>
               </div>
             ))}
 
@@ -265,9 +302,14 @@ function AdminChatPage() {
               <>
                 <div className="adm-chat-messages" ref={scrollRef}>
                   {messages.map((m) => (
-                    <div key={m._id} className={m.sender === myId ? "adm-msg adm-msg-mine" : "adm-msg adm-msg-theirs"}>
-                      {m.text}
-                    </div>
+                    <MessageBubble
+                      key={m._id}
+                      message={m}
+                      mine={m.sender === myId}
+                      prefix="adm"
+                      onEdit={submitEdit}
+                      onUnsend={unsend}
+                    />
                   ))}
                 </div>
                 <form className="adm-chat-input-row" onSubmit={handleSend}>

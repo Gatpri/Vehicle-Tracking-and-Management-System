@@ -73,7 +73,13 @@ services:
       # Auth token signing secret. No default on purpose — the backend refuses
       # to boot without it rather than fall back to a secret committed to the repo.
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (see .env)}
-      
+
+      # Marks the session cookie Secure + SameSite=None. Defaults to false
+      # because this stack serves plain http on localhost, where a Secure
+      # cookie would be dropped and no one could stay signed in. Set
+      # COOKIE_SECURE=true in .env once you're behind HTTPS or a tunnel.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+
       # Both live in the same sidecar (anpr_service), but they're read by two
       # different modules — services/anprService.js and services/sentimentService.js
       # — each with its own env var and its own 127.0.0.1 default. Setting only

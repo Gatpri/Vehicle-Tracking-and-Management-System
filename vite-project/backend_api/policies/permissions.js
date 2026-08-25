@@ -6,6 +6,7 @@
 // isWorkshopScoped narrows workshop-admin.
 const deliveryAdminPermissions = [
   "deliverystaff:manage",        // region-scoped staff listing/assignment context
+  "deliverystaff:create",        // region-scoped: new staff inherit the creator's region
   "deliverystaff:delete",
   "deliverystaff:location:any",  // view any delivery-staff's live/ambient location
 ];
@@ -56,6 +57,7 @@ const rolePolicies = {
   // are granted directly (not via vehiclePlatformPermissions) so narrower
   // roles sharing that array — vehicle-tracking-admin, workshop-admin,
   // accounting-admin — don't inherit them.
+  "deliverystaff:create",
   "deliverystaff:delete",
   "deliverystaff:location:any",
   ...vehiclePlatformPermissions,
@@ -74,6 +76,7 @@ admin: [
   "admin:delete",
   "database:read",
   "database:update",
+  "deliverystaff:create",
   "deliverystaff:delete",
   "deliverystaff:location:any",
   ...vehiclePlatformPermissions,
@@ -158,9 +161,13 @@ admin: [
     "chat:read:any",
   ],
 
-  user: [
-    "user:read",
-    ]
+  // Customers hold no admin-area permissions. "user:read" used to be here, but
+  // its only route is GET /users — the admin dashboard's "list every customer"
+  // endpoint — so granting it let any signed-in customer read the full user
+  // table, names and email addresses included. Everything a customer actually
+  // does (their vehicles, bookings, wallet, chat) is authorised by ownership in
+  // the controllers, not by a permission in this list.
+  user: [],
 
 };
 

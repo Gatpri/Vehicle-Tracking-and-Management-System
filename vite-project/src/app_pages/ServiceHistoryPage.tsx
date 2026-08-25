@@ -46,6 +46,11 @@ function ServiceHistoryPage() {
   if (loading) return <div className="uh-page"><p>Loading...</p></div>;
   if (!data) return <div className="uh-page"><p>Service history not found.</p></div>;
 
+  // Every bar is drawn against the most expensive visit, so their lengths are
+  // comparable to each other rather than to an arbitrary scale. Guarded
+  // against zero: a history of unpriced jobs would otherwise divide by it.
+  const peakSpend = Math.max(...data.history.map((h) => h.finalPrice ?? 0), 0);
+
   return (
     <div className="uh-page">
       <Link to={`/vehicles/${vehicleId}`} className="ap-back-link">← Back to Vehicle</Link>
@@ -102,6 +107,22 @@ function ServiceHistoryPage() {
               </div>
 
               {entry.description && <p className="sh-notes">{entry.description}</p>}
+
+              {/* Spend bar: what this visit cost relative to the dearest one,
+                  which is the comparison an owner actually makes when scanning
+                  a history. Only drawn when there is a priced job to scale
+                  against. */}
+              {peakSpend > 0 && entry.finalPrice != null && (
+                <div className="sh-bar-wrap">
+                  <div className="sh-bar-track">
+                    <div
+                      className={`sh-bar-fill ${entry.finalPrice === peakSpend ? "is-peak" : ""}`}
+                      style={{ width: `${Math.max((entry.finalPrice / peakSpend) * 100, 2)}%` }}
+                    />
+                  </div>
+                  <span className="sh-bar-value">{rs(entry.finalPrice)}</span>
+                </div>
+              )}
 
               {entry.partsReplaced.length > 0 && (
                 <table className="sh-parts">

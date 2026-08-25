@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import "../Admin_Authorization/styles/dashboard.css";
 import "./AdminLayout.css";
-import { useAuth } from "../lib/useAuth";
+import { useAuth } from "../lib/AuthContext";
 import {
   FULL_ADMIN_ROLES,
   TRACKING_ROLES,

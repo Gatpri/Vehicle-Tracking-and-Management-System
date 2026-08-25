@@ -4,8 +4,10 @@ import { Link, useNavigate } from "react-router-dom";
 import axios from 'axios';
 import { toast } from 'react-toastify';
 import { auth, googleProvider } from "../../firebase";
-import { signInWithPopup } from "firebase/auth";  // popup, no useEffect needed
+import { signInWithPopup } from "firebase/auth";
 import { landingPathFor } from "../../lib/roles";
+import api from "../../lib/api";
+import { useAuth } from "../../lib/AuthContext";
 
 const VERIFY_POLL_MS = 3000;
 
@@ -20,6 +22,7 @@ function Signin(){
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
   const navigate = useNavigate();
+  const { refresh } = useAuth();
 
   // While showing "check your email", poll for verification so this same
   // tab moves itself to /login once the link is clicked (in whatever tab
@@ -76,31 +79,34 @@ function Signin(){
     }
   };
 
-  // popup works perfectly on localhost, no Chrome state issues
+  // Popup, matching Login.tsx — see the long comment there for why redirect
+  // was tried and reverted. The COOP console warning it produces is cosmetic;
+  // a login that reliably works is not.
   const handleGoogleSignIn = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     if (isSigning) return;
     setIsSigning(true);
     try {
       googleProvider.setCustomParameters({ prompt: 'select_account' });
-      const result = await signInWithPopup(auth, googleProvider);  // result comes back directly
+      const result = await signInWithPopup(auth, googleProvider);
       const idToken = await result.user.getIdToken();
-      const response = await axios.post("/api/google-auth", { idToken });
+      const response = await api.post("/google-auth", { idToken });
       if (response.data.success) {
-        localStorage.setItem("user", JSON.stringify(response.data.user));
-        localStorage.setItem("token", response.data.token);
+        // The server set an httpOnly session cookie; /api/me is how the app
+        // learns who that session belongs to.
+        const user = await refresh();
         toast.success("Login Successful!");
         // Same role-aware landing as the password login — a
         // vehicle-tracking-admin has no dashboard to land on.
-        navigate(landingPathFor(response.data.user.role));
+        if (user) navigate(landingPathFor(user.role));
       } else {
-        toast.error("Google login failed");
+        toast.error(response.data.message || "Google login failed");
       }
     } catch (error: any) {
       console.error("Google Sign-In error:", error);
       toast.error(error.message || 'Google Sign-In failed');
     } finally {
-      setIsSigning(false);  // always resets button whether success or fail
+      setIsSigning(false);
     }
   };
 

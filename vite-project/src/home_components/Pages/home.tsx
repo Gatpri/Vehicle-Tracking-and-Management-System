@@ -2,14 +2,8 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "../Styles/home.css";
 import heroImg from "../../assets/hero.png";
-
-interface CurrentUser {
-  _id?: string;
-  firstname: string;
-  lastname: string;
-  email: string;
-  role: string;
-}
+import { useAuth } from "../../lib/AuthContext";
+import HowItWorksDemo from "./HowItWorksDemo";
 
 const IconWrench = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -106,9 +100,9 @@ const steps = [
 
 function Home() {
   const navigate = useNavigate();
-  const stored = localStorage.getItem("user");
-  const currentUser: CurrentUser | null = stored ? JSON.parse(stored) : null;
+  const { user: currentUser, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showDemo, setShowDemo] = useState(false);
 
   // Access is decided by the route's ProtectedRoute wrapper (customers only) —
   // this page is never rendered without a valid customer session, so it needs
@@ -117,9 +111,9 @@ function Home() {
 
   const initials = `${currentUser.firstname?.[0] ?? ""}${currentUser.lastname?.[0] ?? ""}`.toUpperCase();
 
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
+  const handleLogout = async () => {
+    // Server-side: only the backend can clear the httpOnly session cookie.
+    await logout();
     navigate("/login");
   };
 
@@ -269,7 +263,7 @@ function Home() {
               <li><IconCheck /> Public theft heatmap to stay aware in high-risk areas</li>
               <li><IconCheck /> Overpricing detection to keep repair quotes honest</li>
             </ul>
-            <button className="uh-btn uh-btn-primary">
+            <button className="uh-btn uh-btn-primary" onClick={() => setShowDemo(true)}>
               See How It Works <IconArrowRight />
             </button>
           </div>
@@ -322,30 +316,38 @@ function Home() {
             </div>
             <p>Smart vehicle service, tracking, and security — powered by AI and a connected CCTV network.</p>
           </div>
+          {/* Every link goes somewhere real. "How It Works" opens the same
+              walkthrough the hero button does rather than jumping to the
+              summary section, since that is what the label promises. */}
           <div className="uh-footer-col">
             <h4>Product</h4>
-            <a href="#services">Services</a>
-            <a href="#ai-security">AI Security</a>
-            <a href="#how-it-works">How It Works</a>
-            <a href="#">Digital Wallet</a>
+            <Link to="/workshops">Book a Service</Link>
+            <Link to="/vehicles">My Vehicles</Link>
+            <Link to="/safety">AI Security</Link>
+            <button type="button" className="uh-footer-link" onClick={() => setShowDemo(true)}>
+              How It Works
+            </button>
+            <Link to="/wallet">Digital Wallet</Link>
           </div>
           <div className="uh-footer-col">
             <h4>Company</h4>
-            <a href="#">About Us</a>
-            <a href="#">Careers</a>
-            <a href="#">Contact</a>
+            <Link to="/help#about">About Us</Link>
+            <Link to="/help#contact">Contact</Link>
+            <a href="#how-it-works">The Process</a>
           </div>
           <div className="uh-footer-col">
             <h4>Support</h4>
-            <a href="#">Help Center</a>
-            <a href="#">Emergency SOS</a>
-            <a href="#">Report an Issue</a>
+            <Link to="/help">Help Center</Link>
+            <Link to="/sos">Emergency SOS</Link>
+            <Link to="/help#contact">Report an Issue</Link>
           </div>
         </div>
         <div className="uh-footer-bottom">
           <span>© {new Date().getFullYear()} VeriTrack. All rights reserved.</span>
         </div>
       </footer>
+
+      {showDemo ? <HowItWorksDemo onClose={() => setShowDemo(false)} /> : null}
     </div>
   );
 }

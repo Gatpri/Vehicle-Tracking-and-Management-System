@@ -6,14 +6,11 @@ import axios from "axios";
 // worked when the browser happened to be on the same machine as Docker.
 export const api = axios.create({
   baseURL: "/api",
-});
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+  // Send the httpOnly session cookie with every request. This replaces the
+  // old interceptor that read a token out of localStorage and built an
+  // Authorization header by hand — there is no longer a token the page can
+  // read, and the browser attaches the cookie on its own.
+  withCredentials: true,
 });
 
 export const getErrorMessage = (err: unknown, fallback: string): string => {

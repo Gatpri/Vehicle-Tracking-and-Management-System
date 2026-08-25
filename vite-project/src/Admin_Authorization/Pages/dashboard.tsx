@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../../lib/api";
+import { useAuth } from "../../lib/AuthContext";
 import { toast } from "react-toastify";
 import "../styles/dashboard.css";
 import DeliveryStaffTablePage from "../../admin_pages/DeliveryStaffTablePage";
@@ -128,11 +129,9 @@ function matchesSearch(u: User, query: string): boolean {
 // a region manages nobody, and the server rejects that outright.
 function CreateAccountForm({
   role,
-  token,
   onCreated,
 }: {
   role: string;
-  token: string;
   onCreated: () => void;
 }) {
   const [firstname, setFirstname] = useState("");
@@ -151,19 +150,15 @@ function CreateAccountForm({
     e.preventDefault();
     setSubmitting(true);
     try {
-      await axios.post(
-        "/api/admins",
-        {
-          firstname,
-          lastname,
-          email,
-          password,
-          role,
-          ...(needsArea ? { area } : {}),
-          ...(needsRegion ? { region } : {}),
-        },
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      await api.post("/admins", {
+        firstname,
+        lastname,
+        email,
+        password,
+        role,
+        ...(needsArea ? { area } : {}),
+        ...(needsRegion ? { region } : {}),
+      });
       toast.success(`${label} created`);
       setFirstname(""); setLastname(""); setEmail(""); setPassword(""); setArea(""); setRegion("");
       onCreated();
@@ -207,12 +202,13 @@ function CreateAccountForm({
 function RoleTable({
   role,
   currentUser,
-  token,
   refreshKey = 0,
 }: {
   role: string;
-  currentUser: User;
-  token: string;
+  // Only the viewer's role is consulted here (for the promote/delete
+  // columns), so this takes the narrow shape /api/me returns rather than the
+  // full User record used for table rows.
+  currentUser: { role: string };
   refreshKey?: number;
 }) {
   const [rows, setRows] = useState<User[]>([]);
@@ -222,9 +218,7 @@ function RoleTable({
   const load = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`/api/users/by-role?role=${role}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await api.get(`/users/by-role?role=${role}`);
       setRows(res.data.users);
     } catch {
       toast.error(`Failed to load ${ROLE_LABELS[role] ?? role}`);
@@ -243,7 +237,7 @@ function RoleTable({
     // endpoint's own superadmin-target guard is the final backstop even if
     // the UI's canDeleteAdminTier check were ever wrong.
     try {
-      await axios.delete(`/api/admins/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      await api.delete(`/admins/${id}`);
       toast.success("Deleted");
       setRows((prev) => prev.filter((r) => r._id !== id));
     } catch (err: any) {
@@ -253,11 +247,7 @@ function RoleTable({
 
   const promoteToSuperadmin = async (id: string) => {
     try {
-      const res = await axios.patch(
-        `/api/users/${id}/promote`,
-        { role: "superadmin" },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await api.patch(`/users/${id}/promote`, { role: "superadmin" });
       toast.success(res.data.message);
       setRows((prev) => prev.filter((r) => r._id !== id));
     } catch (err: any) {
@@ -324,9 +314,9 @@ function RoleTable({
 
 function Dashboard() {
   const navigate = useNavigate();
-  const stored = localStorage.getItem("user");
-  const currentUser: User | null = stored ? JSON.parse(stored) : null;
-  const token = localStorage.getItem("token");
+  // Identity comes from the server via /api/me, not a localStorage blob the
+  // user could edit to hand themselves a role they don't have.
+  const { user: currentUser } = useAuth();
 
   const [users, setUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
@@ -342,17 +332,19 @@ function Dashboard() {
   // manual page reload.
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // ProtectedRoute already gates this page on a valid admin session; this
+  // only covers the session expiring while the tab is open.
   useEffect(() => {
-    if (!currentUser || !token) {
+    if (!currentUser) {
       navigate("/login");
     }
-  }, [currentUser, token, navigate]);
+  }, [currentUser, navigate]);
 
   const loadUsers = async () => {
-    if (!token) return;
+    if (!currentUser) return;
     setLoadingUsers(true);
     try {
-      const res = await axios.get("/api/users", { headers: { Authorization: `Bearer ${token}` } });
+      const res = await api.get("/users");
       setUsers(res.data.users);
     } catch {
       toast.error("Failed to load users");
@@ -364,12 +356,11 @@ function Dashboard() {
   useEffect(() => {
     loadUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [currentUser]);
 
   const handleDeleteUser = async (id: string) => {
-    if (!token) return;
     try {
-      await axios.delete(`/api/users/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      await api.delete(`/users/${id}`);
       toast.success("User deleted");
       setUsers((prev) => prev.filter((u) => u._id !== id));
     } catch {
@@ -379,13 +370,13 @@ function Dashboard() {
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) return;
     try {
-      const res = await axios.post(
-        "/api/users",
-        { firstname: newFirstname, lastname: newLastname, email: newEmail, password: newPassword },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await api.post("/users", {
+        firstname: newFirstname,
+        lastname: newLastname,
+        email: newEmail,
+        password: newPassword,
+      });
       toast.success("User created");
       setUsers((prev) => [...prev, res.data.user]);
       setNewFirstname(""); setNewLastname(""); setNewEmail(""); setNewPassword("");
@@ -395,13 +386,8 @@ function Dashboard() {
   };
 
   const handlePromote = async (id: string, role: string, extra?: { area?: string; region?: string }) => {
-    if (!token) return;
     try {
-      const res = await axios.patch(
-        `/api/users/${id}/promote`,
-        { role, ...extra },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await api.patch(`/users/${id}/promote`, { role, ...extra });
       toast.success(res.data.message);
       setUsers((prev) => prev.filter((u) => u._id !== id));
       // The promoted account moves out of Users and into its new role's table.
@@ -543,12 +529,11 @@ function Dashboard() {
           table, mirroring the Create Users / Users pairing above, rather than
           every form stacked at the top and every table below. A role appears
           here if the viewer can create it, see it, or both. */}
-      {token && roleSections.map((role) => (
+      {roleSections.map((role) => (
         <div key={role}>
           {creatableRoles.includes(role) && (
             <CreateAccountForm
               role={role}
-              token={token}
               onCreated={() => setRefreshKey((k) => k + 1)}
             />
           )}
@@ -556,7 +541,6 @@ function Dashboard() {
             <RoleTable
               role={role}
               currentUser={currentUser}
-              token={token}
               refreshKey={refreshKey}
             />
           )}

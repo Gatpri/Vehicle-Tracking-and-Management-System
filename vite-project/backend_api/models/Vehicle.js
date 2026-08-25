@@ -23,7 +23,33 @@ const VehicleSchema = new mongoose.Schema({
   // A close-up of the number plate, kept apart from the vehicle photos: it's
   // the reference an admin compares a camera's plate read against, so it needs
   // to be addressable on its own rather than buried in the gallery.
+  //
+  // Kept as a single string for backwards compatibility: CCTV matching, the
+  // SOS evidence panel and the web detail page all read this field directly.
+  // It mirrors plateImages[0], maintained by the pre-save hook below.
   plateImageUrl: { type: String, default: "" },
+  // Plate shots by angle. A plate is front and back, and the two do not always
+  // read the same — a rear plate can be the only one a camera catches — so
+  // both are worth holding rather than overwriting one with the other.
+  plateImages: {
+    type: [{
+      url: { type: String, required: true },
+      angle: { type: String, enum: ["front", "back"], required: true },
+      _id: false,
+    }],
+    default: [],
+  },
+  // Vehicle shots by angle, for identifying a car from any side in a camera
+  // frame. Same reasoning as the plate: one photo per angle, replaced rather
+  // than appended, so the set stays meaningful instead of becoming a pile.
+  vehicleImages: {
+    type: [{
+      url: { type: String, required: true },
+      angle: { type: String, enum: ["front", "back", "left", "right"], required: true },
+      _id: false,
+    }],
+    default: [],
+  },
 }, { timestamps: true });
 
 // Keep the normalized form in lockstep with the typed one, so no caller has to
@@ -35,6 +61,16 @@ VehicleSchema.pre("save", function setNormalizedPlate() {
   if (this.isModified("plateNumber") || !this.normalizedPlate) {
     this.normalizedPlate = normalizePlate(this.plateNumber);
   }
+});
+
+// plateImageUrl predates plateImages and is still what CCTV matching, the SOS
+// evidence panel and the web detail page read. Mirroring the front shot (or
+// whatever is left) into it keeps those working untouched, rather than making
+// every consumer learn about the new array.
+VehicleSchema.pre("save", function syncPrimaryPlateImage() {
+  if (!this.isModified("plateImages")) return;
+  const front = this.plateImages.find((p) => p.angle === "front");
+  this.plateImageUrl = (front ?? this.plateImages[0])?.url ?? "";
 });
 
 const Vehicle = mongoose.model("Vehicle", VehicleSchema);

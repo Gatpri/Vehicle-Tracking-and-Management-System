@@ -16,6 +16,14 @@ const router = express.Router();
 const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL || "http://localhost:3000";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
+// How long a verification link stays valid. Five minutes was too tight in
+// practice: on a phone the user has to leave the app, wait for the mail to
+// arrive, find it (often in spam) and open it — and an expired link silently
+// discards the signup, so the account is simply never created. Thirty minutes
+// covers that without leaving unverified rows around for long; the TTL index
+// on PendingUser.expiresAt still clears them automatically.
+const VERIFY_WINDOW_MIN = 30;
+
 //for inputvalidation and sanititization
 const userValidationRules= [
  body('firstname').notEmpty().withMessage('First name is required').isLength({ max: 50 }).withMessage('First name must be under 50 characters'),
@@ -65,7 +73,7 @@ if (!errors.isEmpty()) {
       lastname,
       email,
       password: hashedPassword,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5 minute expiry
+      expiresAt: new Date(Date.now() + VERIFY_WINDOW_MIN * 60 * 1000),
     });
 
       // Send verification email
@@ -78,7 +86,7 @@ if (!errors.isEmpty()) {
         <h2>We are pleased to welcome you in our community!</h2>
         <p>Click the link below to verify your email address:</p>
         <a href="${link}">Verify my email</a>
-        <p>This link expires in 5 minutes.</p>
+        <p>This link expires in ${VERIFY_WINDOW_MIN} minutes.</p>
       `,
     });
 

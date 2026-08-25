@@ -4,6 +4,8 @@ import User from "../models/User.js";
 import Conversation from "../models/Conversation.js";
 import { isAdminRole, hasPermission } from "../policies/permissions.js";
 import { JWT_SECRET } from "./jwt.js";
+import { SESSION_COOKIE } from "./cookies.js";
+import { parseCookie } from "cookie";
 
 let io = null;
 
@@ -12,10 +14,21 @@ export const initSocket = (httpServer, corsOptions) => {
 
   // Same verification as middleware/auth.js's verifyToken, adapted for the
   // handshake — a socket connection is authenticated once, up front.
+  //
+  // The token comes from the session cookie on the handshake request, which
+  // the browser attaches by itself, rather than from `handshake.auth` — the
+  // client can no longer read the token to put it there, which is the whole
+  // point of the cookie being httpOnly.
   io.use(async (socket, next) => {
     try {
-      const token = socket.handshake.auth?.token;
-      if (!token) return next(new Error("No token provided"));
+      // Browsers send the session as a cookie on the handshake request and
+      // cannot read it to put anywhere else. Native clients have no such
+      // cookie, so they pass the token in `handshake.auth.token` instead —
+      // checked only after the cookie, so on the web the cookie still wins.
+      const cookies = parseCookie(socket.handshake.headers?.cookie || "");
+      const authToken = socket.handshake.auth?.token;
+      const token = cookies[SESSION_COOKIE] || (typeof authToken === "string" ? authToken : null);
+      if (!token) return next(new Error("Not authenticated"));
 
       const decoded = jwt.verify(token, JWT_SECRET);
       const user = await User.findOne({ email: decoded.email }).select("-password");

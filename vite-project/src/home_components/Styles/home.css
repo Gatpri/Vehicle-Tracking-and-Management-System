@@ -445,3 +445,20 @@
   .uh-hero-cta { flex-direction: column; align-items: stretch; }
   .uh-hero-cta .uh-btn { width: 100%; }
 }
+
+/* A footer entry that runs an action instead of navigating ("How It Works"
+   opens the walkthrough). Styled to match the anchors around it exactly, so
+   the column reads as one list rather than links plus a stray button. */
+.uh-footer-link {
+  display: block;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 12px;
+  color: #94a3b8;
+  font-size: 13.5px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.uh-footer-link:hover { color: #fff; }

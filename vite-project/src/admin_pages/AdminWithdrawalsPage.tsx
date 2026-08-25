@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { getSocket } from "../lib/socket";
-import { getCurrentUser } from "../lib/useAuth";
+import { useAuth } from "../lib/AuthContext";
 import { isAccountingAdmin, FULL_ADMIN_ROLES } from "../lib/roles";
 import "./AdminPages.css";
 
@@ -24,7 +24,7 @@ interface Withdrawal {
 const rs = (paisa: number) => `Rs ${(paisa / 100).toFixed(2)}`;
 
 function AdminWithdrawalsPage() {
-  const me = getCurrentUser();
+  const { user: me } = useAuth();
   // Plain admins can see the queue and the float, but only accounting-admin
   // and superadmin may action a payout.
   const canReview = isAccountingAdmin(me?.role) || me?.role === "superadmin";

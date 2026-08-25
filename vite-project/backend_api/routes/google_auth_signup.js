@@ -5,6 +5,8 @@ import User from "../models/User.js";
 import { getApps } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { JWT_SECRET } from "../config/jwt.js";
+import { SESSION_COOKIE, sessionCookieOptions } from "../config/cookies.js";
+import { tokenForClient } from "../config/clientKind.js";
 
 const router = express.Router();
 
@@ -45,9 +47,15 @@ router.post("/google-auth", async (req, res) => {
       { expiresIn: "24h" }
     );
 
+    // Same httpOnly cookie as the password login path — the Google flow must
+    // not be the one place a token still reaches page JavaScript.
+    res.cookie(SESSION_COOKIE, jwtToken, sessionCookieOptions());
+
+    // Native callers additionally need the token in the body — same reasoning
+    // as routes/login.js; browsers get nothing extra here.
     res.json({
       success: true,
-      token: jwtToken,
+      ...tokenForClient(req, jwtToken),
       user: {
         id: user._id,
         email: user.email,

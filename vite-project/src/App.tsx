@@ -1,7 +1,6 @@
 import './App.css'
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { useEffect } from 'react';
-import axios from 'axios';
 import { getRedirectResult } from 'firebase/auth';
 import { auth } from './firebase';
 import { toast } from 'react-toastify';
@@ -16,7 +15,8 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 import ProtectedRoute from './components/ProtectedRoute';
-import { getCurrentUser, getToken } from './lib/useAuth';
+import api from './lib/api';
+import { useAuth } from './lib/AuthContext';
 import AppLayout from './components/AppLayout';
 import AdminLayout from './components/AdminLayout';
 import StaffLayout from './components/StaffLayout';
@@ -31,6 +31,7 @@ import WalletPage from './app_pages/WalletPage';
 import ChatPage from './app_pages/ChatPage';
 import SosPage from './app_pages/SosPage';
 import SafetyPage from './app_pages/SafetyPage';
+import HelpPage from './app_pages/HelpPage';
 import ServiceHistoryPage from './app_pages/ServiceHistoryPage';
 
 import AdminBookingsPage from './admin_pages/AdminBookingsPage';
@@ -68,19 +69,22 @@ import {
 
 
 /**
- * Terminal destination for unmatched URLs. Reads the stored session directly
+ * Terminal destination for unmatched URLs. Reads the session from context
  * rather than going through ProtectedRoute: there is no page to protect here,
  * only a decision about where an unknown path should send someone.
  */
 function CatchAllRedirect() {
-  const user = getCurrentUser();
-  const token = getToken();
-  if (!user || !token) return <Navigate to="/login" replace />;
+  const { user, status } = useAuth();
+  // Identity isn't known until /api/me answers — redirecting during that
+  // window would send signed-in users to /signin on every refresh.
+  if (status === "loading") return null;
+  if (!user) return <Navigate to="/signin" replace />;
   return <Navigate to={landingPathFor(user.role)} replace />;
 }
 
 function App(){
   const navigate = useNavigate();
+  const { refresh } = useAuth();
 
   useEffect(() => {
     const handleRedirect = async () => {
@@ -88,15 +92,15 @@ function App(){
         const result = await getRedirectResult(auth);
         if (result && result.user) {
           const idToken = await result.user.getIdToken();
-          const response = await axios.post("/api/google-auth", { idToken, email: result.user.email, displayName: result.user.displayName });
+          const response = await api.post("/google-auth", { idToken, email: result.user.email, displayName: result.user.displayName });
           if (response.data.success) {
-            // Persist the session before navigating: without this the redirect
-            // flow left localStorage empty, so ProtectedRoute saw no user and
-            // bounced every admin page straight back to /login.
-            localStorage.setItem("token", response.data.token);
-            localStorage.setItem("user", JSON.stringify(response.data.user));
+            // The server set the httpOnly session cookie; pull the user record
+            // through /api/me so context is populated before we navigate —
+            // otherwise ProtectedRoute would still read "anonymous" and bounce
+            // every admin page straight back to /signin.
+            const user = await refresh();
             toast.success("Sign in successful");
-            navigate(landingPathFor(response.data.user.role));
+            if (user) navigate(landingPathFor(user.role));
           } else {
             toast.error(response.data.message || "Authentication failed");
           }
@@ -107,7 +111,7 @@ function App(){
       }
     };
     handleRedirect();
-  }, [navigate]);
+  }, [navigate, refresh]);
 
   return(
 <>
@@ -176,6 +180,7 @@ function App(){
 <Route path="/chat" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><ChatPage/></AppLayout></ProtectedRoute>}/>
 <Route path="/sos" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><SosPage/></AppLayout></ProtectedRoute>}/>
 <Route path="/safety" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><SafetyPage/></AppLayout></ProtectedRoute>}/>
+<Route path="/help" element={<ProtectedRoute allowedRoles={CUSTOMER_ROLES}><AppLayout><HelpPage/></AppLayout></ProtectedRoute>}/>
 
 {/* Delivery-staff: a field-worker role with its own minimal layout. */}
 <Route path="/staff/deliveries" element={<ProtectedRoute allowedRoles={[DELIVERY_STAFF_ROLE]}><StaffLayout><DeliveryDashboardPage/></StaffLayout></ProtectedRoute>}/>

@@ -49,6 +49,27 @@ function WorkshopDetailPage() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const [openingChat, setOpeningChat] = useState(false);
+
+  /**
+   * Open (or reopen) this customer's thread with this workshop, then jump to
+   * the chat page with it selected. Reopening returns the same thread rather
+   * than creating a second one.
+   */
+  const chatWithWorkshop = async () => {
+    setOpeningChat(true);
+    try {
+      const res = await api.post("/chat/channels/open", {
+        channel: "workshop",
+        workshopId: id,
+      });
+      navigate(`/chat?conversation=${res.data.conversation._id}`);
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Couldn't open a chat with this workshop"));
+    } finally {
+      setOpeningChat(false);
+    }
+  };
 
   const [workshop, setWorkshop] = useState<Workshop | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -181,6 +202,12 @@ function WorkshopDetailPage() {
           <h1>{workshop.name}</h1>
           <p>{workshop.address} · ★ {workshop.rating.average.toFixed(1)} ({workshop.rating.count})</p>
         </div>
+        {/* Messaging a garage starts here rather than on the chat page: by
+            this point the customer has already chosen which workshop they
+            mean, so there is no list of names to pick from. */}
+        <button className="uh-btn uh-btn-outline" onClick={chatWithWorkshop} disabled={openingChat}>
+          {openingChat ? "Opening…" : "Chat with this workshop"}
+        </button>
       </div>
 
       {workshop.description && <p style={{ marginBottom: 20 }}>{workshop.description}</p>}

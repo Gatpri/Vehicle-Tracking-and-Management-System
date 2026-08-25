@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { getSocket } from "../lib/socket";
-import { getCurrentUser } from "../lib/useAuth";
+import { useAuth } from "../lib/AuthContext";
 import "./TheftAlertOverlay.css";
 
 interface SightingAlert {
@@ -35,6 +35,14 @@ interface SightingAlert {
 function TheftAlertOverlay() {
   const [alert, setAlert] = useState<SightingAlert | null>(null);
   const [sending, setSending] = useState<"confirm" | "deny" | null>(null);
+  const { user: me } = useAuth();
+
+  // The socket subscription below is mounted once, so reading `me` from the
+  // closure would pin it to whoever was signed in at mount — which is `null`
+  // on first render, since /api/me hasn't answered yet. A ref lets the
+  // handler see the current user without resubscribing on every change.
+  const meRef = useRef(me);
+  meRef.current = me;
 
   useEffect(() => {
     let cancelled = false;
@@ -57,8 +65,7 @@ function TheftAlertOverlay() {
       // as to the owner's own room. Only the owner gets the full-screen
       // interrupt — an admin who happens to be on a user page must not be told
       // that someone else's car is theirs.
-      const me = getCurrentUser();
-      const myId = me?._id ?? me?.id;
+      const myId = meRef.current?.id;
       if (!sighting.matchedVehicle || !myId) return;
       if (String(sighting.matchedVehicle.owner) !== String(myId)) return;
       setAlert(sighting);

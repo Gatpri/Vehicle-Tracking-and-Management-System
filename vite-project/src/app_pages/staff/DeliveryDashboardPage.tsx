@@ -95,10 +95,25 @@ function DeliveryCard({ delivery, onUpdated }: { delivery: Delivery; onUpdated: 
     setSharing(false);
   };
 
-  // Advancing past the en-route states should stop the watch even if the
-  // staff member forgets to toggle it off themselves.
+  /**
+   * Location sharing follows the delivery's own status — there is no toggle.
+   *
+   * A driver who is en route is, by definition, delivering; asking them to
+   * remember a button meant a customer watching the map saw nothing while the
+   * vehicle was genuinely moving. It starts again on its own for the return
+   * leg, which passes through en_route_to_dropoff just as the pickup passes
+   * through en_route_to_pickup.
+   *
+   * The server accepts pushes for exactly these statuses (EN_ROUTE_STATUSES in
+   * deliveryHandlers.js), so driving the client from the same rule keeps the
+   * two in step.
+   */
   useEffect(() => {
-    if (!EN_ROUTE.includes(delivery.status)) stopSharing();
+    if (EN_ROUTE.includes(delivery.status)) {
+      if (!sharing) startSharing();
+    } else if (sharing) {
+      stopSharing();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [delivery.status]);
 
@@ -212,13 +227,12 @@ function DeliveryCard({ delivery, onUpdated }: { delivery: Delivery; onUpdated: 
             {updating ? "Updating..." : action.label}
           </button>
         )}
+        {/* Status, not a control — sharing turns itself on and off with the
+            delivery's own status. */}
         {EN_ROUTE.includes(delivery.status) && (
-          <button
-            className={`uh-btn uh-btn-sm ${sharing ? "uh-btn-outline" : "uh-btn-orange"}`}
-            onClick={sharing ? stopSharing : startSharing}
-          >
-            {sharing ? "Stop sharing location" : "Share my location"}
-          </button>
+          <span className={`uh-badge ${sharing ? "uh-badge-green" : "uh-badge-slate"}`}>
+            {sharing ? "Sharing your location" : "Starting location sharing…"}
+          </span>
         )}
       </div>
 

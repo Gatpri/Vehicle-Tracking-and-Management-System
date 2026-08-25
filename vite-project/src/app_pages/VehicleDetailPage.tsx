@@ -2,6 +2,14 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
+import {
+  PhotoSlots,
+  byAngle,
+  PLATE_ANGLES,
+  VEHICLE_ANGLES,
+  type PlateAngle,
+  type VehicleAngle,
+} from "../components/VehiclePhotoSlots";
 
 interface Vehicle {
   _id: string;
@@ -14,6 +22,13 @@ interface Vehicle {
   status: "active" | "stolen" | "inactive";
   images: string[];
   plateImageUrl: string;
+  /**
+   * Photos held per angle. The flat images[]/plateImageUrl fields are kept in
+   * step by the backend, so CCTV matching and the SOS evidence panel continue
+   * to read them unchanged.
+   */
+  plateImages?: { url: string; angle: PlateAngle }[];
+  vehicleImages?: { url: string; angle: VehicleAngle }[];
 }
 
 function VehicleDetailPage() {
@@ -23,7 +38,8 @@ function VehicleDetailPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState<"vehicle" | "plate" | null>(null);
+  // Keyed "kind:angle" so only the slot being replaced shows a spinner.
+  const [uploading, setUploading] = useState<string | null>(null);
 
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
@@ -66,15 +82,18 @@ function VehicleDetailPage() {
     }
   };
 
-  const uploadPhoto = async (file: File, kind: "vehicle" | "plate") => {
-    setUploading(kind);
+  const uploadPhoto = async (file: File, kind: "vehicle" | "plate", angle: string) => {
+    setUploading(`${kind}:${angle}`);
     try {
       const formData = new FormData();
       formData.append("image", file);
       formData.append("kind", kind);
+      // The angle makes this a slot rather than an append: re-uploading the
+      // front plate replaces the front plate instead of leaving two.
+      formData.append("angle", angle);
       const res = await api.post(`/vehicles/${id}/photos`, formData);
       setVehicle(res.data.vehicle);
-      toast.success(kind === "plate" ? "Number plate photo saved" : "Vehicle photo added");
+      toast.success("Photo saved");
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to upload photo"));
     } finally {
@@ -116,7 +135,6 @@ function VehicleDetailPage() {
         </div>
         <div className="ap-detail-actions">
           <Link to={`/vehicles/${vehicle._id}/history`} className="uh-btn uh-btn-ghost">Service History</Link>
-          <Link to={`/tracking/${vehicle._id}`} className="uh-btn uh-btn-primary">Track Vehicle</Link>
           <Link to={`/workshops?vehicleId=${vehicle._id}`} className="uh-btn uh-btn-orange">Book Service</Link>
         </div>
       </div>
@@ -164,65 +182,29 @@ function VehicleDetailPage() {
       </p>
 
       <div className="ap-photo-cols">
-        <section>
-          <h4 className="ap-photo-head">Number plate close-up</h4>
-          {vehicle.plateImageUrl ? (
-            <figure className="ap-photo">
-              <img src={vehicle.plateImageUrl} alt="Number plate" />
-              <button className="ap-photo-remove" onClick={() => removePhoto(vehicle.plateImageUrl, "plate")}>
-                Remove
-              </button>
-            </figure>
-          ) : (
-            <div className="ap-photo-empty">No plate photo yet</div>
-          )}
-          <label className="uh-btn uh-btn-ghost ap-photo-upload">
-            {uploading === "plate" ? "Uploading..." : vehicle.plateImageUrl ? "Replace plate photo" : "Upload plate photo"}
-            <input
-              type="file"
-              accept="image/*"
-              hidden
-              disabled={uploading !== null}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) uploadPhoto(file, "plate");
-                e.target.value = "";
-              }}
-            />
-          </label>
-        </section>
+        <PhotoSlots
+          title="Number plate photos"
+          hint="Front and back. This is what a camera's plate read is compared against."
+          angles={PLATE_ANGLES}
+          photos={byAngle(vehicle.plateImages)}
+          kind="plate"
+          uploading={uploading}
+          onUpload={uploadPhoto}
+          onRemove={(_angle, url) => url && removePhoto(url, "plate")}
+        />
 
-        <section>
-          <h4 className="ap-photo-head">Vehicle photos</h4>
-          {vehicle.images.length === 0 ? (
-            <div className="ap-photo-empty">No vehicle photos yet</div>
-          ) : (
-            <div className="ap-photo-grid">
-              {vehicle.images.map((url, i) => (
-                <figure className="ap-photo" key={url}>
-                  <img src={url} alt={`Vehicle ${i + 1}`} />
-                  {i === 0 && <span className="ap-photo-primary">Primary</span>}
-                  <button className="ap-photo-remove" onClick={() => removePhoto(url, "vehicle")}>Remove</button>
-                </figure>
-              ))}
-            </div>
-          )}
-          <label className="uh-btn uh-btn-ghost ap-photo-upload">
-            {uploading === "vehicle" ? "Uploading..." : "Add vehicle photo"}
-            <input
-              type="file"
-              accept="image/*"
-              hidden
-              disabled={uploading !== null}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) uploadPhoto(file, "vehicle");
-                e.target.value = "";
-              }}
-            />
-          </label>
-        </section>
+        <PhotoSlots
+          title="Vehicle photos"
+          hint="All four sides, so the vehicle can be identified from any angle."
+          angles={VEHICLE_ANGLES}
+          photos={byAngle(vehicle.vehicleImages)}
+          kind="vehicle"
+          uploading={uploading}
+          onUpload={uploadPhoto}
+          onRemove={(_angle, url) => url && removePhoto(url, "vehicle")}
+        />
       </div>
+
     </div>
   );
 }

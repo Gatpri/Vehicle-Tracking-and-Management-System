@@ -1,0 +1,1159 @@
+/*
+ * The "See How It Works" walkthrough.
+ *
+ * Everything here is CSS animation rather than a video file: it stays sharp at
+ * any size, loads instantly, and never contradicts the real UI after a
+ * redesign. Colours are pulled from the same variables the landing page uses so
+ * the dialog reads as part of the site, not a bolted-on widget.
+ */
+
+.hiw-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(4, 8, 18, 0.82);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: hiw-fade 220ms ease;
+}
+
+@keyframes hiw-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.hiw-modal {
+  width: min(920px, 100%);
+  max-height: 92vh;
+  overflow-y: auto;
+  background: var(--navy-950);
+  border: 1px solid #223357;
+  border-radius: 18px;
+  color: #fff;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+  animation: hiw-rise 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes hiw-rise {
+  from { transform: translateY(18px) scale(0.98); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.hiw-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid #1b2a4a;
+  flex-wrap: wrap;
+}
+.hiw-kicker {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #60a5fa;
+  background: rgba(37, 99, 235, 0.14);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.hiw-head h2 { font-size: 21px; margin: 10px 0 0; color: #fff; }
+.hiw-close {
+  background: transparent;
+  border: 1px solid #223357;
+  color: #94a3b8;
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  font-size: 22px; line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.hiw-close:hover { color: #fff; border-color: #3b5185; }
+
+.hiw-body {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 24px;
+  padding: 22px 24px;
+  align-items: center;
+}
+
+.hiw-stage {
+  position: relative;
+  height: 300px;
+  border-radius: 14px;
+  border: 1px solid #1b2a4a;
+  background:
+    repeating-linear-gradient(0deg, #0c1730, #0c1730 2px, #0e1c38 2px, #0e1c38 4px);
+  overflow: hidden;
+}
+
+/* The hand-over between scenes. The wrapper stays mounted and only its
+   contents dissolve, so the walkthrough reads as one continuous piece rather
+   than six clips cut together. The slight scale keeps the motion alive through
+   the fade — a pure opacity change reads as a stall. */
+.hiw-stage-inner,
+.hiw-caption {
+  transition: opacity 380ms ease, transform 380ms ease;
+}
+.hiw-stage-inner { position: absolute; inset: 0; }
+.hiw-stage.is-fading .hiw-stage-inner {
+  opacity: 0;
+  transform: scale(0.985);
+}
+.hiw-caption.is-fading {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.hiw-caption h3 { font-size: 19px; margin: 8px 0 10px; color: #fff; }
+.hiw-caption p { color: #94a3b8; font-size: 14.5px; line-height: 1.65; margin: 0; }
+.hiw-step-count {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+/* Progress rail ---------------------------------------------------------- */
+.hiw-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 24px 16px;
+}
+.hiw-rail-item {
+  display: flex; align-items: center; gap: 7px;
+  background: transparent;
+  border: 1px solid #1b2a4a;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 160ms, border-color 160ms;
+}
+.hiw-rail-item:hover { color: #cbd5e1; }
+.hiw-rail-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #334155;
+}
+.hiw-rail-item.is-done { color: #94a3b8; }
+.hiw-rail-item.is-done .hiw-rail-dot { background: var(--green-500); }
+.hiw-rail-item.is-active {
+  color: #fff;
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.12);
+}
+.hiw-rail-item.is-active .hiw-rail-dot {
+  background: #60a5fa;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.18);
+}
+
+.hiw-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 24px 20px;
+  border-top: 1px solid #1b2a4a;
+}
+.hiw-controls { display: flex; gap: 8px; }
+.hiw-btn {
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 9px 16px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.hiw-btn-ghost { background: transparent; border-color: #223357; color: #cbd5e1; }
+.hiw-btn-ghost:hover:not(:disabled) { color: #fff; border-color: #3b5185; }
+.hiw-btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+.hiw-btn-primary { background: var(--blue-700); color: #fff; }
+.hiw-btn-primary:hover { background: var(--blue-600); }
+
+/* Shared scene bits ------------------------------------------------------ */
+.hiw-art { position: absolute; inset: 0; }
+
+.hiw-phone {
+  position: absolute;
+  top: 18px; left: 50%;
+  transform: translateX(-50%);
+  width: 170px;
+  height: 214px;
+  background: #0f1e3a;
+  border: 2px solid #2a3f6b;
+  border-radius: 18px;
+  padding: 16px 12px 12px;
+  animation: hiw-pop 500ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.hiw-phone-notch {
+  position: absolute; top: 7px; left: 50%; transform: translateX(-50%);
+  width: 44px; height: 4px; border-radius: 3px; background: #2a3f6b;
+}
+@keyframes hiw-pop {
+  from { transform: translateX(-50%) scale(0.9); opacity: 0; }
+  to { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+/* Shared entrance used by several scenes. */
+@keyframes hiw-slide-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Replica-UI scenes ------------------------------------------------------ *
+ *
+ * The first three scenes are no longer diagrams of the product: they are the
+ * product's own screens, rebuilt in miniature, driven by a cursor that clicks
+ * and types the way a visitor would. Someone watching should recognise the
+ * page they will land on after signing up, not a stylised stand-in for it.
+ *
+ * The markup mirrors the real components — uh-card / uh-form-row / uh-field on
+ * VehiclesPage, ap-sos-* on SosPage — but under hiw-ui- class names with their
+ * own values. Reusing the app's stylesheet was the other option and was
+ * rejected: those rules are sized for a full page, and the scene has to read
+ * at a third of that inside a 300px stage.
+ * ------------------------------------------------------------------------ */
+
+/* The pointer. One element shared by every scene that needs a hand on the
+   screen; each scene supplies its own path as a keyframe animation, so the
+   travel, the pauses and the clicks stay in step with the typing. */
+.hiw-cursor {
+  position: absolute;
+  z-index: 20;
+  width: 15px; height: 20px;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+  opacity: 0;
+}
+.hiw-cursor svg { width: 100%; height: 100%; display: block; }
+
+/* The tap ripple, sized to sit under the pointer tip. Fires on its own delay
+   so a click reads as a click and not as the cursor merely arriving. */
+.hiw-tap {
+  position: absolute;
+  z-index: 19;
+  width: 26px; height: 26px;
+  margin: -13px 0 0 -13px;
+  border-radius: 50%;
+  border: 2px solid rgba(96, 165, 250, 0.9);
+  opacity: 0;
+  pointer-events: none;
+  animation: hiw-tap-ring 520ms ease-out both;
+}
+@keyframes hiw-tap-ring {
+  0% { opacity: 0.95; transform: scale(0.25); }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+
+/* A field the cursor is currently in. */
+@keyframes hiw-focus-ring {
+  from { border-color: #223357; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+  to { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.22); }
+}
+
+/* Typing. The text is clipped to a width that steps out from zero, so the
+   characters appear one at a time the way they would under a real keyboard,
+   and a caret rides the right-hand edge while it happens. */
+.hiw-typed {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
+  max-width: 0;
+  animation: hiw-type 900ms steps(14, end) both;
+}
+@keyframes hiw-type { to { max-width: 100%; } }
+/* The caret blinks only while its own field is being typed into. It is two
+   animations: the blink, and a window that reveals it for the duration of
+   the typing and hides it again afterwards. */
+.hiw-caret {
+  display: inline-block;
+  width: 1px;
+  height: 11px;
+  background: #3b82f6;
+  opacity: 0;
+  animation:
+    hiw-caret-blink 620ms steps(1, end) infinite,
+    hiw-caret-window 1s steps(1, end) both;
+}
+@keyframes hiw-caret-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes hiw-caret-window {
+  0% { visibility: hidden; }
+  10%, 88% { visibility: visible; }
+  100% { visibility: hidden; }
+}
+
+/* Shared chrome for both replica screens ---------------------------------- */
+.hiw-ui {
+  position: absolute;
+  inset: 0;
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: #0b1526;
+  overflow: hidden;
+}
+/* The card grows to fill what is left under the page header, so the Register
+   button lands at the bottom of the frame where the cursor path aims for it
+   instead of floating in the middle with dead space beneath. */
+.hiw-ui-card { flex: 1; justify-content: space-between; }
+.hiw-ui-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.hiw-ui-h1 { font-size: 13px; font-weight: 700; color: #fff; margin: 0; }
+.hiw-ui-btn {
+  font-size: 9.5px; font-weight: 700;
+  border-radius: 6px;
+  padding: 5px 9px;
+  background: var(--blue-700, #1d4ed8);
+  color: #fff;
+  white-space: nowrap;
+}
+.hiw-ui-btn-danger { background: var(--red-500, #ef4444); }
+.hiw-ui-btn-wide { align-self: flex-start; }
+
+.hiw-ui-card {
+  background: #0f1c33;
+  border: 1px solid #1b2a4a;
+  border-radius: 9px;
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  opacity: 0;
+  animation: hiw-slide-in 380ms ease both;
+}
+.hiw-ui-row { display: flex; gap: 7px; }
+.hiw-ui-row > * { flex: 1; min-width: 0; }
+
+.hiw-ui-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.hiw-ui-field > label {
+  font-size: 8px; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+/* The input itself. is-filling runs the focus ring; the value inside it is
+   what the typing animation reveals. */
+.hiw-ui-input {
+  display: flex; align-items: center; gap: 1px;
+  height: 19px;
+  padding: 0 6px;
+  border: 1px solid #223357;
+  border-radius: 5px;
+  background: #0a1425;
+  font-size: 10px; font-weight: 600; color: #e2e8f0;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+}
+/* The ring comes up as the cursor arrives and goes down again as it leaves,
+   so exactly one field is ever lit — a form with six glowing inputs reads as
+   a validation error, not as someone typing. The duration is set per field
+   in the TSX to span arrival-to-departure. */
+.hiw-ui-input.is-filling {
+  animation: hiw-focus-cycle 1s ease both;
+}
+@keyframes hiw-focus-cycle {
+  0% { border-color: #223357; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+  12%, 82% { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.22); }
+  100% { border-color: #223357; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+.hiw-ui-input.is-select::after {
+  content: "\25be";
+  margin-left: auto;
+  font-size: 8px;
+  color: #64748b;
+}
+.hiw-ui-placeholder { color: #475569; font-weight: 500; }
+.hiw-ui-textarea { height: 30px; align-items: flex-start; padding-top: 4px; }
+
+/* Photo slots — the real page asks for two plate shots and four vehicle
+   sides, so the demo asks for the same six. Each fills as the cursor
+   reaches it. */
+.hiw-ui-photos { display: flex; gap: 8px; }
+.hiw-ui-photo-group { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.hiw-ui-photo-title { font-size: 8px; color: #94a3b8; font-weight: 700; }
+.hiw-ui-slots { display: flex; gap: 4px; }
+.hiw-ui-slot {
+  position: relative;
+  flex: 1;
+  height: 26px;
+  border: 1px dashed #2a3f6b;
+  border-radius: 5px;
+  background: #0a1425;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+/* The angle label sits on top of the "photo", so it needs its own contrast
+   rather than borrowing the empty slot's background. */
+.hiw-ui-slot em {
+  position: relative; z-index: 2;
+  font-size: 6.5px; font-style: normal;
+  color: #e2e8f0;
+  background: rgba(4, 10, 20, 0.66);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+/* Once uploaded: the dashes become a solid frame and a small photo-like fill
+   slides in behind the angle label. */
+.hiw-ui-slot.is-filled { animation: hiw-slot-fill 300ms ease both; }
+@keyframes hiw-slot-fill {
+  from { border-style: dashed; border-color: #2a3f6b; }
+  to { border-style: solid; border-color: #2f6b4a; }
+}
+.hiw-ui-slot-img {
+  position: absolute; inset: 0;
+  opacity: 0;
+  animation: hiw-fade-in 340ms ease both;
+}
+@keyframes hiw-fade-in { to { opacity: 1; } }
+.hiw-ui-slot-img::after {
+  content: "";
+  position: absolute; left: 50%; top: 68%;
+  transform: translate(-50%, -50%);
+  width: 58%; height: 26%;
+  border-radius: 1px;
+  background: #e2e8f0;
+}
+.hiw-ui-slot-plate .hiw-ui-slot-img { background: linear-gradient(160deg, #1e3a6b, #0f2547); }
+.hiw-ui-slot-veh .hiw-ui-slot-img { background: linear-gradient(160deg, #24425f, #12283f); }
+.hiw-ui-slot-veh .hiw-ui-slot-img::after {
+  width: 58%; height: 24%;
+  border-radius: 3px 6px 3px 3px;
+  background: #64748b;
+}
+.hiw-ui-slot-tick {
+  position: absolute; right: 2px; top: 0; z-index: 3;
+  font-size: 8px; color: var(--green-500, #16a34a); font-weight: 800;
+  opacity: 0;
+  animation: hiw-fade-in 300ms ease both;
+}
+
+/* The success toast the app actually shows on save. */
+.hiw-ui-toast {
+  position: absolute;
+  right: 10px; bottom: 10px;
+  z-index: 18;
+  display: flex; align-items: center; gap: 6px;
+  max-width: 76%;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: #0d2a1c;
+  border: 1px solid #256b47;
+  color: #86efac;
+  font-size: 9.5px; font-weight: 700;
+  opacity: 0;
+  animation: hiw-toast-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.hiw-ui-toast.is-danger {
+  background: #2a1114; border-color: #7f1d24; color: #fecaca;
+}
+@keyframes hiw-toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 1 · Register — the real "My Vehicles" page ------------------------------ */
+/* Card appears after the cursor presses "+ Add Vehicle". */
+.hiw-reg-card { animation-delay: 900ms; }
+
+/* Cursor path: rest → the Add Vehicle button → down through the three fields
+   → across the photo slots → the Register button. Percentages are of the
+   scene, so it stays on target at any stage width. */
+.hiw-cursor-reg {
+  animation: hiw-cur-reg 9.6s cubic-bezier(0.5, 0, 0.2, 1) both;
+}
+@keyframes hiw-cur-reg {
+  0%   { left: 62%; top: 76%; opacity: 0; }
+  4%   { left: 62%; top: 76%; opacity: 1; }
+  /* + Add Vehicle */
+  9%   { left: 83%; top: 8%; }
+  15%  { left: 83%; top: 8%; }
+  /* Plate Number */
+  20%  { left: 20%; top: 28%; }
+  32%  { left: 20%; top: 28%; }
+  /* Make */
+  36%  { left: 48%; top: 28%; }
+  44%  { left: 48%; top: 28%; }
+  /* Model */
+  48%  { left: 76%; top: 28%; }
+  56%  { left: 76%; top: 28%; }
+  /* Plate photo slots */
+  62%  { left: 15%; top: 66%; }
+  67%  { left: 31%; top: 66%; }
+  /* Vehicle photo slots */
+  72%  { left: 55%; top: 66%; }
+  76%  { left: 66%; top: 66%; }
+  80%  { left: 77%; top: 66%; }
+  84%  { left: 88%; top: 66%; }
+  /* Register */
+  93%  { left: 14%; top: 82%; }
+  100% { left: 14%; top: 82%; opacity: 1; }
+}
+
+/* 2 · Report — the real SOS page ------------------------------------------ */
+.hiw-sos-hero {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.hiw-sos-big {
+  width: 38px; height: 38px;
+  /* A round control cannot grow with its label, so clip rather than let a
+     long translation spill across the screen behind it. */
+  overflow: hidden;
+  padding: 0 3px;
+  border-radius: 50%;
+  background: var(--red-500, #ef4444);
+  color: #fff;
+  font-size: 8px; font-weight: 800; letter-spacing: 0.04em;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+  animation: hiw-sos-pulse 1.6s ease-out 4;
+}
+@keyframes hiw-sos-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+  70% { box-shadow: 0 0 0 14px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+/* The two branches, exactly as the page offers them. Only the theft one is
+   chosen — the other stays visible so the choice is seen to be a choice. */
+.hiw-sos-choice { display: flex; gap: 7px; width: 100%; }
+.hiw-sos-option {
+  flex: 1;
+  display: flex; flex-direction: column; gap: 2px;
+  border: 1px solid #223357;
+  border-radius: 7px;
+  background: #0f1c33;
+  padding: 5px 8px;
+  opacity: 0;
+  animation: hiw-slide-in 340ms ease both;
+}
+.hiw-sos-option strong { font-size: 9px; color: #e2e8f0; }
+.hiw-sos-option span { font-size: 7.5px; color: #64748b; line-height: 1.3; }
+.hiw-sos-option.is-chosen {
+  animation: hiw-slide-in 340ms ease both, hiw-choose 300ms ease forwards;
+}
+@keyframes hiw-choose {
+  to { border-color: var(--red-500, #ef4444); background: rgba(239, 68, 68, 0.1); }
+}
+.hiw-sos-option.is-chosen strong { color: #fecaca; }
+
+/* The map picker on the theft form. Not a real map — a plausible one: a
+   street grid with a dropped pin, which is what the field looks like once a
+   location has been chosen. */
+.hiw-ui-map {
+  position: relative;
+  height: 42px;
+  border-radius: 6px;
+  border: 1px solid #223357;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 17px, rgba(59, 130, 246, 0.13) 17px 19px),
+    repeating-linear-gradient(0deg, transparent 0 13px, rgba(59, 130, 246, 0.13) 13px 15px),
+    #0a1425;
+  overflow: hidden;
+}
+.hiw-ui-pin {
+  position: absolute; left: 46%; top: 46%;
+  width: 9px; height: 9px;
+  margin: -9px 0 0 -4.5px;
+  border-radius: 50% 50% 50% 0;
+  background: var(--red-500, #ef4444);
+  animation: hiw-pin-drop 380ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes hiw-pin-drop {
+  from { transform: rotate(-45deg) scale(0) translateY(-10px); }
+  to { transform: rotate(-45deg) scale(1) translateY(0); }
+}
+.hiw-ui-map-label {
+  position: absolute; left: 5px; bottom: 4px;
+  font-size: 7.5px; color: #94a3b8;
+  background: rgba(10, 20, 37, 0.85);
+  border-radius: 3px;
+  padding: 1px 4px;
+  opacity: 0;
+  animation: hiw-fade-in 300ms ease both;
+}
+
+/* The SOS screen stacks more than the register form does — hero, two
+   options, a select, a map and a description — so it gets its own tighter
+   metrics. Without these the submit button falls off the bottom of the
+   stage, which is the one control the scene exists to show being pressed. */
+.hiw-report-card {
+  animation-delay: 2500ms;
+  gap: 5px;
+  padding: 7px 9px;
+}
+.hiw-art-sos .hiw-ui { gap: 5px; padding: 8px 12px 10px; }
+.hiw-art-sos .hiw-ui-bar { margin-bottom: 1px; }
+.hiw-art-sos .hiw-ui-h1 { font-size: 12px; }
+.hiw-art-sos .hiw-ui-map { height: 34px; }
+.hiw-art-sos .hiw-ui-textarea { height: 24px; }
+.hiw-art-sos .hiw-ui-field > label { font-size: 7.5px; }
+
+/* Cursor path: SOS → the theft option → the vehicle dropdown → the map →
+   the description → the red report button. */
+.hiw-cursor-sos {
+  animation: hiw-cur-sos 11.2s cubic-bezier(0.5, 0, 0.2, 1) both;
+}
+@keyframes hiw-cur-sos {
+  0%   { left: 74%; top: 80%; opacity: 0; }
+  3%   { left: 74%; top: 80%; opacity: 1; }
+  /* SEND SOS */
+  8%   { left: 50%; top: 14%; }
+  14%  { left: 50%; top: 14%; }
+  /* "My vehicle was stolen" */
+  21%  { left: 73%; top: 33%; }
+  26%  { left: 73%; top: 33%; }
+  /* Vehicle dropdown */
+  36%  { left: 28%; top: 51%; }
+  43%  { left: 28%; top: 51%; }
+  /* Map pin */
+  52%  { left: 46%; top: 68%; }
+  59%  { left: 46%; top: 68%; }
+  /* Description */
+  67%  { left: 30%; top: 83%; }
+  80%  { left: 30%; top: 83%; }
+  /* Report theft */
+  92%  { left: 33%; top: 94%; }
+  100% { left: 33%; top: 94%; opacity: 1; }
+}
+
+/* 3 · Watch — a CCTV wall ------------------------------------------------- *
+ *
+ * The point of this scene is that the watching is ordinary and continuous, so
+ * it is staged as an operator would see it: four live tiles with camera IDs,
+ * a running clock, and REC on the one that matters. The vehicles drive in
+ * perspective under a fixed camera rather than side-on, because a side-on
+ * cartoon car reads as a diagram and a foreshortened one reads as footage.
+ * ------------------------------------------------------------------------ */
+.hiw-cctv {
+  position: absolute; inset: 0;
+  display: grid;
+  /* The main tile is sized by the footage's own 4:3 and the quiet feeds take
+     what is left. A drawn scene could be any shape; real video cannot, and
+     stretching it to a column that happened to be 1.85fr wide distorted the
+     street. */
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  /* The main tile is locked to the footage's 4:3 rather than stretched to the
+     row, so it will usually be shorter than the stage. Centring it puts the
+     leftover as an even margin above and below instead of a band of empty
+     backdrop hanging under the wall. */
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: #070d18;
+}
+/* The tile carrying the video takes the clip's shape. Stretched to whatever
+   height the grid row happened to be, `cover` cropped the sides off the
+   street — the widest part of the frame is where the traffic is. */
+.hiw-cctv > .hiw-cam-tile:first-child { aspect-ratio: 4 / 3; }
+/* The quiet feeds take the full stage height, so the wall fills its frame
+   rather than leaving a band of empty backdrop under the main tile. */
+.hiw-cctv-side { align-self: stretch; }
+.hiw-cctv-side {
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 6px;
+  min-height: 0;
+}
+
+/* One camera tile. */
+.hiw-cam-tile {
+  position: relative;
+  border: 1px solid #1b2a4a;
+  border-radius: 6px;
+  background: #0a1120;
+  overflow: hidden;
+}
+/* Interlace + a slow vertical roll: the two artefacts that make a rectangle
+   read as a video feed rather than a coloured box. */
+.hiw-cam-tile::after {
+  content: "";
+  position: absolute; inset: 0;
+  /* Above the whole scene (road, vehicles, detection box) so the interlace
+     lies over the picture the way a real feed's does, but below the burnt-in
+     labels and clock, which a DVR draws after the fact. */
+  z-index: 5;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 3px);
+  animation: hiw-scanroll 7s linear infinite;
+}
+@keyframes hiw-scanroll {
+  from { background-position: 0 0; }
+  to { background-position: 0 60px; }
+}
+.hiw-cam-label {
+  position: absolute; left: 5px; top: 4px; z-index: 6;
+  display: flex; align-items: center; gap: 4px;
+  font-size: 7.5px; font-weight: 700; letter-spacing: 0.04em;
+  color: #cbd5e1;
+  text-shadow: 0 1px 2px #000;
+}
+.hiw-cam-live {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--green-500, #16a34a);
+  animation: hiw-blink 1.4s steps(1, end) infinite;
+}
+@keyframes hiw-blink { 0%, 60% { opacity: 1; } 61%, 100% { opacity: 0.25; } }
+.hiw-cam-rec {
+  position: absolute; right: 5px; top: 4px; z-index: 6;
+  display: flex; align-items: center; gap: 3px;
+  font-size: 7px; font-weight: 800; letter-spacing: 0.08em;
+  color: #fca5a5;
+  text-shadow: 0 1px 2px #000;
+}
+.hiw-cam-rec i {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--red-500, #ef4444);
+  animation: hiw-blink 1.4s steps(1, end) infinite;
+}
+.hiw-cam-clock {
+  position: absolute; left: 5px; bottom: 4px; z-index: 6;
+  font-size: 7px; color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px #000;
+}
+
+/* The main tile plays real footage, so it needs no drawn scene at all — the
+   road, the approaching vehicle, the headlamp wash and the detection box that
+   used to live here are gone with it. What is left is fitting the video to the
+   tile and keeping the burnt-in chrome legible over it. */
+.hiw-cam-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* The clip is cropped to this tile's 4:3, so cover and contain agree; cover
+     is used so a rounding difference shows as a trimmed hairline rather than
+     as a letterbox bar inside a frame meant to read as a camera feed. */
+  object-fit: cover;
+  display: block;
+  background: #05080f;
+}
+/* The three small tiles. Each is a different quiet corner of the network —
+   the watching is everywhere, not only where the story happens. */
+.hiw-cam-mini { position: absolute; inset: 0; }
+.hiw-cam-mini-road {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 52%;
+  background: linear-gradient(180deg, #0d1524, #171f31);
+}
+.hiw-cam-mini-veh {
+  position: absolute; bottom: 16%;
+  width: 16px; height: 7px;
+  border-radius: 2px 3px 2px 2px;
+  background: #46536b;
+  animation: hiw-mini-drive 6s linear infinite both;
+}
+@keyframes hiw-mini-drive {
+  from { left: -20px; }
+  to { left: 105%; }
+}
+.hiw-cam-mini-veh.is-rtl {
+  animation-name: hiw-mini-drive-rtl;
+  background: #3d4a60;
+}
+@keyframes hiw-mini-drive-rtl {
+  from { left: 105%; }
+  to { left: -20px; }
+}
+/* Occasional dropped frames on one of the quiet tiles — real networks are
+   never all-perfect, and the flicker sells the whole wall as live. */
+.hiw-cam-tile.is-noisy .hiw-cam-mini { animation: hiw-flicker 4.3s steps(1, end) infinite; }
+@keyframes hiw-flicker {
+  0%, 96% { opacity: 1; }
+  97% { opacity: 0.45; }
+  98% { opacity: 1; }
+  99% { opacity: 0.6; }
+}
+
+/* 3 · Read --------------------------------------------------------------- */
+.hiw-frame {
+  position: absolute;
+  top: 12px; left: 50%; transform: translateX(-50%);
+  /* Wide enough that the target plate's side tag fits inside the frame — the
+     frame clips its contents, and a tag cut in half looks like a glitch. */
+  width: 320px; height: 154px;
+  background: #0a1428;
+  border: 1px solid #223357;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.hiw-frame-tag {
+  position: absolute; top: 6px; left: 8px;
+  font-size: 9.5px; color: #64748b;
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.hiw-scan {
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, #22d3ee, transparent);
+  box-shadow: 0 0 12px 2px rgba(34, 211, 238, 0.6);
+  animation: hiw-scan-move 1.1s ease-in-out 3;
+}
+@keyframes hiw-scan-move {
+  0% { top: 0; }
+  100% { top: 100%; }
+}
+/* Every plate in view gets boxed — the system reads them all. Only the
+   registered one is highlighted and followed through to the readout below. */
+.hiw-read-row {
+  position: absolute; inset: 22px 12px 10px;
+  display: flex; flex-direction: column; justify-content: center;
+  /* Enough room that the target's tag, which sits to its right, never crowds
+     the plate on the row above. */
+  gap: 9px;
+}
+.hiw-read-plate {
+  position: relative;
+  align-self: center;
+  font-size: 11.5px; font-weight: 800; letter-spacing: 0.05em;
+  color: #94a3b8;
+  border: 2px solid #3b5185;
+  border-radius: 4px;
+  padding: 3px 10px;
+  opacity: 0;
+  animation: hiw-box-in 380ms ease both;
+}
+@keyframes hiw-box-in {
+  from { opacity: 0; transform: scale(1.3); }
+  to { opacity: 1; transform: scale(1); }
+}
+.hiw-read-plate.is-target {
+  color: #fff;
+  border-color: var(--green-500);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.16);
+}
+/* The tag sits beside its plate, not above it.
+   Stacking it overhead put it in the gap between two rows, where it read as a
+   label for the plate above — the opposite of what it says. To the right it is
+   unambiguously attached to the plate it belongs to. */
+.hiw-read-tag {
+  position: absolute;
+  left: calc(100% + 7px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--green-500); color: #06210f;
+  font-size: 8.5px; font-weight: 700;
+  padding: 2px 6px; border-radius: 3px;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+/* A pointer back to the plate, so the link is unmistakable even at a glance. */
+.hiw-read-tag::before {
+  content: "";
+  position: absolute;
+  left: -4px; top: 50%;
+  transform: translateY(-50%);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-right: 4px solid var(--green-500);
+}
+.hiw-readout {
+  position: absolute;
+  bottom: 12px; left: 50%; transform: translateX(-50%);
+  width: 320px;
+  text-align: center;
+}
+.hiw-readout-label {
+  display: block;
+  font-size: 10px; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  margin-bottom: 4px;
+}
+.hiw-plate-text {
+  display: inline-flex;
+  font-size: 19px; font-weight: 800;
+  letter-spacing: 0.09em;
+  color: #fff;
+}
+/* Characters appear one at a time — the visual shorthand for "it is reading
+   the plate", which is far clearer than the text simply being there. */
+.hiw-plate-text b {
+  opacity: 0;
+  animation: hiw-char 260ms ease both;
+  white-space: pre;
+}
+@keyframes hiw-char {
+  from { opacity: 0; transform: translateY(-5px); color: #22d3ee; }
+  to { opacity: 1; transform: none; color: #fff; }
+}
+
+/* 4 · Match -------------------------------------------------------------- */
+.hiw-compare {
+  position: absolute;
+  inset: 16px 16px 46px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.hiw-chip {
+  background: #0a1730;
+  border: 1px solid #2a3f6b;
+  border-radius: 9px;
+  padding: 7px 14px;
+  text-align: center;
+}
+.hiw-chip span { display: block; font-size: 9.5px; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; }
+.hiw-chip strong { font-size: 14px; letter-spacing: 0.05em; color: #fff; }
+.hiw-vs { font-size: 10.5px; color: #64748b; }
+.hiw-list {
+  width: 190px;
+  background: #0a1428;
+  border: 1px solid #223357;
+  border-radius: 9px;
+  padding: 7px;
+}
+.hiw-list-title {
+  display: block; font-size: 9.5px; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px;
+}
+.hiw-list-row {
+  font-size: 11.5px; color: #64748b;
+  padding: 3px 6px; border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+.hiw-list-row.is-hit {
+  color: #fff; font-weight: 700;
+  background: rgba(239, 68, 68, 0.16);
+  animation: hiw-hit 700ms ease 1400ms both;
+}
+@keyframes hiw-hit {
+  0% { background: rgba(239, 68, 68, 0); }
+  40% { background: rgba(239, 68, 68, 0.45); }
+  100% { background: rgba(239, 68, 68, 0.16); }
+}
+.hiw-verdict {
+  position: absolute; bottom: 16px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--red-500); color: #fff;
+  font-size: 12px; font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 6px 18px; border-radius: 999px;
+  opacity: 0;
+  animation: hiw-verdict-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) 2100ms both;
+}
+@keyframes hiw-verdict-in {
+  from { opacity: 0; transform: translateX(-50%) scale(0.7); }
+  to { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+/* 5 · Alert -------------------------------------------------------------- */
+.hiw-phone-alert { animation-delay: 200ms; }
+.hiw-notif {
+  background: #0a1730;
+  border: 1px solid var(--red-500);
+  border-radius: 10px;
+  padding: 9px 10px;
+  opacity: 0;
+  animation: hiw-notif-in 520ms cubic-bezier(0.2, 0.8, 0.2, 1) 900ms both;
+}
+@keyframes hiw-notif-in {
+  from { opacity: 0; transform: translateY(-14px); }
+  to { opacity: 1; transform: none; }
+}
+.hiw-notif-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 700;
+  color: var(--red-500);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-bottom: 5px;
+}
+.hiw-notif-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--red-500);
+  animation: hiw-blink 1s ease-in-out infinite;
+}
+@keyframes hiw-blink { 50% { opacity: 0.25; } }
+.hiw-notif strong { display: block; font-size: 14px; color: #fff; letter-spacing: 0.05em; }
+.hiw-notif-meta { display: block; font-size: 10px; color: #64748b; margin-top: 2px; }
+.hiw-notif-shot {
+  height: 46px; margin-top: 7px; border-radius: 6px;
+  background:
+    repeating-linear-gradient(0deg, #0d1830, #0d1830 2px, #12203c 2px, #12203c 4px);
+  border: 1px solid #223357;
+}
+.hiw-ping {
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 6px;
+}
+.hiw-ping span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--red-500);
+  animation: hiw-ping-up 1.3s ease-in-out infinite;
+}
+.hiw-ping span:nth-child(2) { animation-delay: 0.18s; }
+.hiw-ping span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes hiw-ping-up {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-5px); }
+}
+
+/* 6 · Safe --------------------------------------------------------------- */
+.hiw-pass-row {
+  position: absolute; inset: 22px 20px 60px;
+  display: flex; flex-direction: column; gap: 9px; justify-content: center;
+}
+.hiw-pass {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #0a1730;
+  border: 1px solid #223357;
+  border-radius: 8px;
+  padding: 9px 12px;
+  opacity: 0;
+  animation: hiw-pass-in 520ms ease both;
+}
+@keyframes hiw-pass-in {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 0.85; transform: none; }
+}
+.hiw-pass span { font-size: 12.5px; font-weight: 700; color: #cbd5e1; letter-spacing: 0.04em; }
+.hiw-pass em { font-size: 10.5px; color: #64748b; font-style: normal; }
+.hiw-safe-note {
+  position: absolute; bottom: 20px; left: 20px; right: 20px;
+  text-align: center;
+  font-size: 12px; color: var(--green-500); font-weight: 600;
+  margin: 0;
+}
+
+/* Responsive ------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .hiw-backdrop { padding: 12px; }
+  .hiw-body { grid-template-columns: 1fr; gap: 18px; padding: 18px; }
+  /* The replica screens carry real form rows, so they need the height back
+     rather than the diagram-era 218px. */
+  .hiw-stage { height: 270px; }
+  /* On a narrow phone the 320px camera frame would be wider than the stage
+     itself; cap both it and the readout to the space actually available. */
+  .hiw-frame, .hiw-readout { width: min(320px, 100% - 16px); }
+  .hiw-head { padding: 18px 18px 14px; }
+  .hiw-head h2 { font-size: 18px; }
+  .hiw-rail { padding: 0 18px 14px; }
+  .hiw-foot { flex-direction: column-reverse; align-items: stretch; padding: 14px 18px 18px; }
+  .hiw-controls { justify-content: space-between; }
+  .hiw-btn { flex: 1; }
+  /* Six photo slots side by side stop being readable this narrow; the two
+     groups stack instead, which is also what the real page does. */
+  .hiw-ui-photos { flex-direction: column; gap: 5px; }
+  .hiw-ui-slot { height: 22px; }
+  /* One wide feed reads better than a wall of thumbnails on a phone. */
+  .hiw-cctv { grid-template-columns: 1fr; }
+  .hiw-cctv-side { display: none; }
+}
+
+/* Language switch + narration --------------------------------------------- */
+.hiw-head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.hiw-lang {
+  display: flex;
+  background: #0a1730;
+  border: 1px solid #223357;
+  border-radius: 999px;
+  padding: 2px;
+}
+.hiw-lang-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 150ms, background 150ms;
+  white-space: nowrap;
+}
+.hiw-lang-btn:hover { color: #cbd5e1; }
+.hiw-lang-btn.is-on { background: var(--blue-700); color: #fff; }
+
+/* Devanagari sits lower than Latin at the same size, so Nepali text needs a
+   little more line height to avoid looking cramped against its neighbours. */
+.hiw-modal[lang="ne"] .hiw-caption p,
+.hiw-modal[lang="ne"] .hiw-caption h3 { line-height: 1.8; }
+.hiw-modal[lang="ne"] .hiw-rail-item { font-size: 12.5px; }
+.hiw-modal[lang="ne"] .hiw-form-label { letter-spacing: 0; }
+.hiw-modal[lang="ne"] .hiw-read-tag,
+.hiw-modal[lang="ne"] .hiw-veh-plate { letter-spacing: 0; }
+
+.hiw-foot-right { display: flex; align-items: center; gap: 8px; }
+.hiw-audio { display: inline-flex; align-items: center; gap: 7px; }
+.hiw-audio svg { width: 15px; height: 15px; }
+.hiw-audio.is-on {
+  color: #fff;
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.14);
+}
+
+.hiw-voice-note {
+  margin: 0;
+  padding: 0 24px 18px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .hiw-foot-right { flex-direction: column-reverse; align-items: stretch; gap: 8px; }
+  .hiw-audio { justify-content: center; }
+  .hiw-voice-note { padding: 0 18px 16px; }
+  .hiw-head-right { width: 100%; justify-content: space-between; }
+}
+
+/* Someone who has asked for less motion still gets the whole explanation —
+   the captions and the rail carry it. Only the movement is dropped.
+
+   The replica-UI scenes need one extra thought: their content is *revealed*
+   by animation, so simply switching animations off would leave an empty form
+   and a blank camera tile. Everything is therefore forced to its finished
+   state — form filled, photos attached, pin dropped, vehicle in frame — and
+   only the pointer, which has nothing to say once it cannot move, is
+   hidden. */
+@media (prefers-reduced-motion: reduce) {
+  .hiw-backdrop,
+  .hiw-modal,
+  .hiw-art *,
+  .hiw-phone,
+  .hiw-notif,
+  .hiw-pass,
+  .hiw-stage-inner,
+  .hiw-caption,
+  .hiw-read-plate,
+  .hiw-verdict,
+  .hiw-plate-text b {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .hiw-phone { transform: translateX(-50%) !important; }
+  .hiw-verdict { transform: translateX(-50%) !important; }
+  .hiw-stage-inner, .hiw-caption { transition: none !important; }
+
+  /* Replica screens: show the completed result rather than the empty form. */
+  .hiw-ui *,
+  .hiw-cctv * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .hiw-cursor, .hiw-tap { display: none !important; }
+  .hiw-typed { max-width: 100% !important; }
+  .hiw-caret { display: none !important; }
+  .hiw-ui-slot { border-style: solid !important; border-color: #2f6b4a !important; }
+  .hiw-ui-pin { transform: rotate(-45deg) !important; }
+  .hiw-sos-option.is-chosen {
+    border-color: var(--red-500, #ef4444) !important;
+    background: rgba(239, 68, 68, 0.1) !important;
+  }
+  /* The Watch tile's video is handled in the component, not here: CSS cannot
+     pause a <video>, and pretending otherwise would leave the one piece of
+     motion this preference most obviously covers still running. */
+}

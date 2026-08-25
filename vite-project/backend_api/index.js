@@ -2,9 +2,11 @@ import "./env.js";
 import http from "http";
 import express from "express";
 import cors  from "cors";
+import cookieParser from "cookie-parser";
 import { connectDB } from "./db.js";
 import signupRoutes from "./routes/signup.js";
 import loginRoutes from "./routes/login.js"
+import sessionRoutes from "./routes/session.js";
 import recoverRoutes from "./routes/password_recover.js";
 import googleAuthRoutes from "./routes/google_auth_signup.js";
 import protectedRoutes from "./routes/protectedRoutes.js";
@@ -70,11 +72,37 @@ app.set("trust proxy", true);
 // FRONTEND_URL is included here too so CORS automatically follows whatever
 // it's set to (a Cloudflare tunnel URL for cross-device access, or
 // localhost for same-machine dev) without a second place to edit.
+// `credentials: true` is what lets the browser send the session cookie on
+// cross-origin calls, and it is only honoured against an explicit origin
+// allowlist — never a wildcard. Authorization is gone from allowedHeaders:
+// nothing sends it any more now that the session travels in a cookie.
+// "http://localhost" (and 127.0.0.1) are port 80 — the nginx frontend in
+// docker-compose, which is what you get browsing to plain http://localhost.
+// They're listed explicitly because FRONTEND_URL points at the LAN IP, and a
+// credentialed request whose Origin isn't matched here gets no
+// Access-Control-Allow-Origin back, so the browser blocks the login outright.
 const corsOptions = {
-  origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:3000", process.env.FRONTEND_URL].filter(Boolean),
+  origin: [
+    "http://localhost",
+    "http://127.0.0.1",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:3000",
+    // The Expo web build, which Metro serves on 8081. That is the same
+    // codebase as the iOS/Android apps, run in a browser; it calls this API
+    // cross-origin because Metro does not proxy /api the way nginx does for
+    // vite-project.
+    "http://localhost:8081",
+    "http://127.0.0.1:8081",
+    // A phone or a second machine opening the Expo web build over the LAN
+    // sends its own host as the Origin, which cannot be known at build time.
+    // Set EXPO_WEB_URL (e.g. http://192.168.254.28:8081) when that is needed.
+    process.env.EXPO_WEB_URL,
+    process.env.FRONTEND_URL,
+  ].filter(Boolean),
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type"],
 };
 
 app.use(cors(corsOptions));
@@ -85,6 +113,10 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+
+// Populates req.cookies, which middleware/auth.js reads the session from.
+// Must be registered before any route that authenticates.
+app.use(cookieParser());
 
 app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
 
@@ -98,6 +130,7 @@ await connectDB();
 // from inside the container, never through nginx.
 app.use("/api", signupRoutes)
 app.use("/api", loginRoutes)
+app.use("/api", sessionRoutes);
 app.use("/api", recoverRoutes);
 app.use("/api", googleAuthRoutes);
 app.use("/api", protectedRoutes);

@@ -3,7 +3,7 @@ import { NavLink } from "react-router-dom";
 import "../styles/theme.css";
 import "../app_pages/AppPages.css";
 import "./AppLayout.css";
-import { useAuth } from "../lib/useAuth";
+import { useAuth } from "../lib/AuthContext";
 import NotificationBell from "./NotificationBell";
 
 // A minimal shell for delivery-staff — a field-worker role, not a back-office

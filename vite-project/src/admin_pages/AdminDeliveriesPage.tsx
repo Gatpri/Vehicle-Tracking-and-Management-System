@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import LiveDeliveryMap from "../components/LiveDeliveryMap";
-import { legStatusLabel, BOOKING_STATUS } from "../lib/bookingWorkflow";
+import { legStatusLabel } from "../lib/bookingWorkflow";
 
 interface AssignableRow {
   booking: {
@@ -39,9 +39,6 @@ interface DeliveryRow {
   // legs (paid once, to whichever single staff member does the round trip).
   booking: {
     serviceType: string;
-    // Drives whether Reassign is still offered: once it reads
-    // "delivery-reassigned" the one reassignment has been used.
-    status?: string;
     vehicle: { plateNumber: string } | null;
     deliveryFee?: number | null;
     distanceKm?: number | null;
@@ -148,37 +145,10 @@ function AssignRow({ row, onAssigned }: { row: AssignableRow; onAssigned: () => 
   );
 }
 
-function InFlightRow({ row, onReassigned }: { row: DeliveryRow; onReassigned: () => void }) {
+// Read-only once a leg is assigned: an admin sees who is carrying it and can
+// follow them on the map, but the assignment itself is final here.
+function InFlightRow({ row }: { row: DeliveryRow }) {
   const [expanded, setExpanded] = useState(false);
-  const [reassigning, setReassigning] = useState(false);
-  const [justReassigned, setJustReassigned] = useState(false);
-
-  // Reassign is offered exactly once, and only before the driver has set off
-  // (past "assigned" the server refuses it anyway). Once the booking reads
-  // "delivery-reassigned" that turn has been used, so the row shows only its
-  // status from then on — previously the button stayed clickable forever,
-  // letting the same leg be reassigned over and over.
-  const canReassign =
-    row.status === "assigned" &&
-    !!row.staff &&
-    !justReassigned &&
-    row.booking?.status !== BOOKING_STATUS.RETURN_REASSIGNED;
-
-  const reassign = async () => {
-    if (!row.staff) return;
-    setReassigning(true);
-    try {
-      await api.patch(`/deliveries/${row._id}/reassign`, { staffId: row.staff._id });
-      toast.success(row.leg === "return" ? "Delivery reassigned" : "Reassigned");
-      // Latch immediately: the refetch confirms it via booking.status, but
-      // until it lands the button must not accept a second click.
-      setJustReassigned(true);
-      onReassigned();
-    } catch (err) {
-      toast.error(getErrorMessage(err, "Failed to reassign"));
-      setReassigning(false);
-    }
-  };
 
   return (
     <div>
@@ -195,11 +165,6 @@ function InFlightRow({ row, onReassigned }: { row: DeliveryRow; onReassigned: ()
         </div>
         <div className="ap-row-actions">
           <span className="uh-badge uh-badge-blue">{legStatusLabel(row.leg, row.status)}</span>
-          {canReassign && (
-            <button className="uh-btn uh-btn-sm uh-btn-ghost" onClick={reassign} disabled={reassigning}>
-              {reassigning ? "Reassigning..." : "Reassign"}
-            </button>
-          )}
           {EN_ROUTE.includes(row.status) && (
             <button className="uh-btn uh-btn-sm uh-btn-ghost" onClick={() => setExpanded((v) => !v)}>
               {expanded ? "Hide map" : "Show map"}
@@ -290,7 +255,7 @@ function AdminDeliveriesPage() {
           ) : (
             <div className="uh-list">
               {inFlight.map((row) => (
-                <InFlightRow key={row._id} row={row} onReassigned={load} />
+                <InFlightRow key={row._id} row={row} />
               ))}
             </div>
           )}

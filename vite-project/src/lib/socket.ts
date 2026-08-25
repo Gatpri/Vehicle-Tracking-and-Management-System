@@ -10,18 +10,15 @@ export const getSocket = (): Socket => {
   // No URL: connects to the page's own origin, which nginx proxies to the
   // backend at /socket.io — works from any host the browser used to load
   // the page, not just the Docker host itself.
-  const token = localStorage.getItem("token");
+  //
+  // No `auth` payload: the session is an httpOnly cookie the page cannot
+  // read, and `withCredentials` makes the browser send it on the handshake
+  // request, where config/socket.js reads it. That also removes the old
+  // stale-token problem on reconnect — the browser always sends whatever
+  // cookie is current, so there is nothing to refresh by hand.
   socket = io({
-    auth: { token },
+    withCredentials: true,
     autoConnect: true,
-  });
-
-  // Socket.IO reconnects on its own, but the server's room memberships do not
-  // survive it: `socket.join(...)` is per-connection, so every room a client
-  // joined is gone after a drop. Re-read the token here too, so a session
-  // refreshed in another tab doesn't reconnect with a stale one.
-  socket.on("reconnect_attempt", () => {
-    if (socket) socket.auth = { token: localStorage.getItem("token") };
   });
 
   return socket;

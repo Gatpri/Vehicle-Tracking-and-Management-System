@@ -1,7 +1,14 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
+import {
+  PhotoSlots,
+  PLATE_ANGLES,
+  VEHICLE_ANGLES,
+  type PlateAngle,
+  type VehicleAngle,
+} from "../components/VehiclePhotoSlots";
 
 interface Vehicle {
   _id: string;
@@ -21,6 +28,38 @@ const statusBadge = (status: string) => {
   return "uh-badge uh-badge-green";
 };
 
+/**
+ * Object URLs for a set of picked files, revoked when they are replaced.
+ *
+ * Without the revoke every re-pick leaks the previous blob for the life of the
+ * tab; without the memo a new url is minted on every render, which also makes
+ * the <img> flicker as it reloads.
+ */
+function useObjectUrls<T extends string>(files: Partial<Record<T, File>>): Partial<Record<T, string>> {
+  const urls = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(files)
+          .filter(([, f]) => !!f)
+          .map(([k, f]) => [k, URL.createObjectURL(f as File)])
+      ) as Partial<Record<T, string>>,
+    [files]
+  );
+
+  // Revoke the previous batch once the next render has replaced them, and the
+  // final batch on unmount. Doing it in the memo instead would revoke urls the
+  // committed DOM is still displaying.
+  useEffect(() => {
+    return () => {
+      for (const url of Object.values(urls)) {
+        if (typeof url === "string") URL.revokeObjectURL(url);
+      }
+    };
+  }, [urls]);
+
+  return urls;
+}
+
 function VehiclesPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +72,18 @@ function VehiclesPage() {
   const [year, setYear] = useState("");
   const [color, setColor] = useState("");
   const [vehicleType, setVehicleType] = useState("car");
+
+  // Held until the vehicle exists: the upload endpoint is
+  // /vehicles/:id/photos, and there is no id before the POST succeeds. Object
+  // URLs give the slots a preview without reading the file twice.
+  const [plates, setPlates] = useState<Partial<Record<PlateAngle, File>>>({});
+  const [shots, setShots] = useState<Partial<Record<VehicleAngle, File>>>({});
+  const [progress, setProgress] = useState<string | null>(null);
+
+  // Memoised, and revoked on change: createObjectURL leaks until revoked, and
+  // calling it inline in render would mint a fresh url on every keystroke.
+  const platePreviews = useObjectUrls(plates);
+  const shotPreviews = useObjectUrls(shots);
 
   const load = async () => {
     try {
@@ -59,13 +110,16 @@ function VehiclesPage() {
     setYear("");
     setColor("");
     setVehicleType("car");
+    setPlates({});
+    setShots({});
+    setProgress(null);
   };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await api.post("/vehicles", {
+      const res = await api.post("/vehicles", {
         plateNumber,
         make,
         model,
@@ -73,6 +127,32 @@ function VehiclesPage() {
         color,
         vehicleType,
       });
+
+      const id: string | undefined = res.data?.vehicle?._id;
+      const queued = [
+        ...Object.entries(plates).map(([angle, f]) => ["plate", angle, f] as const),
+        ...Object.entries(shots).map(([angle, f]) => ["vehicle", angle, f] as const),
+      ].filter(([, , f]) => !!f);
+
+      if (id && queued.length) {
+        // Sequential rather than Promise.all: six multipart bodies at once is
+        // how uploads time out, and the count gives something honest to watch.
+        for (let i = 0; i < queued.length; i++) {
+          const [kind, angle, file] = queued[i];
+          setProgress(`Uploading photo ${i + 1} of ${queued.length}...`);
+          const body = new FormData();
+          body.append("image", file as File);
+          body.append("kind", kind);
+          body.append("angle", angle);
+          try {
+            await api.post(`/vehicles/${id}/photos`, body);
+          } catch {
+            // A failed photo must not discard the registered vehicle — it can
+            // be added again from the vehicle's own page.
+          }
+        }
+      }
+
       toast.success("Vehicle registered");
       resetForm();
       setShowForm(false);
@@ -129,6 +209,51 @@ function VehiclesPage() {
               </select>
             </div>
           </div>
+          {/* Captured at registration rather than only afterwards: a plate shot
+              is the reference a camera match is compared against, and this is
+              the moment the owner has the photos to hand. */}
+          <div className="ap-photo-cols" style={{ margin: "22px 0" }}>
+            <PhotoSlots
+              title="Number plate photos"
+              hint="Front and back. This is what a camera's plate read is compared against."
+              angles={PLATE_ANGLES}
+              photos={platePreviews}
+              kind="plate"
+              uploading={null}
+              onUpload={(file, _kind, angle) =>
+                setPlates((p) => ({ ...p, [angle as PlateAngle]: file }))
+              }
+              onRemove={(angle) =>
+                setPlates((p) => {
+                  const next = { ...p };
+                  delete next[angle];
+                  return next;
+                })
+              }
+            />
+
+            <PhotoSlots
+              title="Vehicle photos"
+              hint="All four sides, so the vehicle can be identified from any angle."
+              angles={VEHICLE_ANGLES}
+              photos={shotPreviews}
+              kind="vehicle"
+              uploading={null}
+              onUpload={(file, _kind, angle) =>
+                setShots((p) => ({ ...p, [angle as VehicleAngle]: file }))
+              }
+              onRemove={(angle) =>
+                setShots((p) => {
+                  const next = { ...p };
+                  delete next[angle];
+                  return next;
+                })
+              }
+            />
+          </div>
+
+          {progress ? <p className="ap-photo-hint">{progress}</p> : null}
+
           <button className="uh-btn uh-btn-primary" type="submit" disabled={submitting}>
             {submitting ? "Registering..." : "Register"}
           </button>

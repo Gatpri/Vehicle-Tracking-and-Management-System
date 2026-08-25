@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from "react";
 import "../styles/Login.css";
 import { Link } from "react-router-dom";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { toast } from 'react-toastify';
 import { auth, googleProvider } from "../../firebase";
 import { signInWithPopup } from "firebase/auth";
 import { landingPathFor } from "../../lib/roles";
+import api from "../../lib/api";
+import { useAuth } from "../../lib/AuthContext";
 
 function Login() {
   const [email, setEmail] = useState<string>("");
@@ -14,27 +15,26 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
   const navigate =useNavigate();
+  const { refresh } = useAuth();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
     try {
-      const result = await axios.post("/api/login", {
+      const result = await api.post("/login", {
         email,
         password,
       });
-      console.log(result.data);
 
 if (result.data.success) {
-  // ✅ SAVE TOKEN (MOST IMPORTANT FIX)
-  localStorage.setItem("token", result.data.token);
-
-  // keep this
-  localStorage.setItem("user", JSON.stringify(result.data.user));
+  // Nothing to store: the server set an httpOnly session cookie. Pull the
+  // authoritative user record through /api/me so the whole app shares one
+  // source of truth for who is signed in and what role they hold.
+  const user = await refresh();
 
   // Each role has its own landing page — a vehicle-tracking-admin has no
   // access to /dashboard, so sending them there would just bounce.
-  navigate(landingPathFor(result.data.user.role));
+  if (user) navigate(landingPathFor(user.role));
 }
 
     } catch (err) {
@@ -47,8 +47,19 @@ if (result.data.success) {
     }
   };
 
-  // Same flow as the signup page: /google-auth creates the account on first
-  // sign-in and returns the existing one afterwards, so one handler covers both.
+  // Popup, deliberately — not signInWithRedirect. Firebase's popup flow polls
+  // `popup.closed`, which Google's COOP policy on accounts.google.com blocks,
+  // so Chrome logs a "Cross-Origin-Opener-Policy policy would block the
+  // window.closed call" warning on every poll. That warning is cosmetic: the
+  // sign-in completes regardless.
+  //
+  // Redirect silences it but is far more fragile — the return trip has to land
+  // back on an origin Firebase lists under Authorized Domains, and browsers
+  // blocking third-party storage can drop the pending sign-in state entirely.
+  // A noisy console beats a login that fails, so this stays on popup.
+  //
+  // /google-auth creates the account on first sign-in and returns the existing
+  // one afterwards, so this one handler covers both signup and login.
   const handleGoogleSignIn = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     if (isSigning) return;
@@ -57,14 +68,15 @@ if (result.data.success) {
       googleProvider.setCustomParameters({ prompt: "select_account" });
       const result = await signInWithPopup(auth, googleProvider);
       const idToken = await result.user.getIdToken();
-      const response = await axios.post("/api/google-auth", { idToken });
+      const response = await api.post("/google-auth", { idToken });
       if (response.data.success) {
-        localStorage.setItem("user", JSON.stringify(response.data.user));
-        localStorage.setItem("token", response.data.token);
+        // The server set an httpOnly session cookie; /api/me is how the app
+        // learns who that session belongs to.
+        const user = await refresh();
         toast.success("Login Successful!");
-        navigate(landingPathFor(response.data.user.role));
+        if (user) navigate(landingPathFor(user.role));
       } else {
-        toast.error("Google login failed");
+        toast.error(response.data.message || "Google login failed");
       }
     } catch (error) {
       console.error("Google Sign-In error:", error);

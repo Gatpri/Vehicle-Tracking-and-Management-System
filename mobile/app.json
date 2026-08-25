@@ -1,0 +1,80 @@
+{
+  "expo": {
+    "name": "Vehicle Safety",
+    "slug": "vehicle-safety-mobile",
+    "scheme": "vehiclesafety",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vehiclesafety.mobile",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        },
+        "NSLocalNetworkUsageDescription": "The app connects to the development server on your local network.",
+        "NSLocationWhenInUseUsageDescription": "Your location is used to send an accurate position with SOS alerts and to find nearby workshops.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Delivery staff share their location while a pickup or drop-off is in progress so customers can track their vehicle.",
+        "NSCameraUsageDescription": "The camera is used to photograph vehicles and parts for service quotes.",
+        "NSMicrophoneUsageDescription": "The microphone is used to record voice notes on parts quotes.",
+        "NSPhotoLibraryUsageDescription": "Photos are used to attach images to vehicles and service requests."
+      }
+    },
+    "android": {
+      "package": "com.vehiclesafety.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f1e3a",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA",
+        "RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "The camera reads number plates live so stolen vehicles are spotted as they pass."
+        }
+      ],
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Delivery staff share their location while a pickup or drop-off is in progress so customers can track their vehicle."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Photos are used to attach images to vehicles and service requests.",
+          "cameraPermission": "The camera is used to photograph vehicles and parts for service quotes."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-video"
+    ]
+  }
+}
