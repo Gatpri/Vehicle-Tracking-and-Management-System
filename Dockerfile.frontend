@@ -7,7 +7,10 @@ WORKDIR /app
 COPY vite-project/package*.json ./
 
 # Install dependencies
-RUN npm ci
+# --ignore-scripts skips native postinstall builds (sharp et al) that the
+# browser bundle never uses. devDependencies ARE needed here: vite, typescript
+# and the react plugin all run during `npm run build`.
+RUN npm ci --ignore-scripts --no-audit --no-fund
 
 # Copy source code
 COPY vite-project/src ./src
@@ -30,6 +33,8 @@ RUN npm run build
 RUN rm -f /.env
 
 # Production Stage - Serve with nginx
+# Only /app/dist crosses this boundary, so the 462MB node_modules and the
+# whole build toolchain stay behind in the builder stage.
 FROM nginx:alpine
 
 # Copy nginx config
@@ -43,7 +48,7 @@ EXPOSE 80
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
+  CMD wget --quiet --tries=1 --spider http://127.0.0.1/ || exit 1
 
 # Start nginx
 CMD ["nginx", "-g", "daemon off;"]

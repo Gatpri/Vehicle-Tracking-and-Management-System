@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
-import { getSocket } from "../lib/socket";
+import { getSocket, subscribeWithReconnect } from "../lib/socket";
 import { useAuth } from "../lib/AuthContext";
 import { MessageBubble, type ChatMessage as Message } from "../components/MessageBubble";
 import "./AdminPages.css";
@@ -118,6 +118,16 @@ function AdminChatPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
 
+  // Join the open thread's room, and re-join it after any reconnect. A bare
+  // emit only holds until the first disconnect — a reconnect is a new socket
+  // with no room memberships. Same helper every other live view uses.
+  useEffect(() => {
+    if (!activeId) return;
+    return subscribeWithReconnect("chat:join", activeId, (message) =>
+      toast.error(message || "Lost access to that conversation")
+    );
+  }, [activeId]);
+
   const submitEdit = async (id: string, newText: string) => {
     try {
       await api.patch(`/chat/messages/${id}`, { text: newText });
@@ -142,7 +152,8 @@ function AdminChatPage() {
     try {
       const res = await api.get(`/chat/conversations/${id}/messages`);
       setMessages(res.data.messages);
-      getSocket().emit("chat:join", id);
+      // The room is joined by the effect keyed on activeId, not here — see
+      // the note there. setActiveId above is what triggers it.
     } catch {
       toast.error("Failed to load messages");
     }

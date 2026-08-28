@@ -3,6 +3,7 @@ import { LayoutAnimation, Platform, Pressable, StyleSheet, Text, UIManager, View
 import { useRouter } from "expo-router";
 import { Screen, Card, Button } from "../../src/components/ui";
 import HowItWorks from "../../src/components/HowItWorks";
+import ServicingWalkthrough from "../../src/components/ServicingWalkthrough";
 import { colors, radius, spacing } from "../../src/theme";
 
 /**
@@ -69,7 +70,11 @@ const FAQS: Faq[] = [
 export default function HelpScreen() {
   const router = useRouter();
   const [open, setOpen] = useState<number | null>(null);
-  const [showDemo, setShowDemo] = useState(false);
+  // Which walkthrough is open, if any. One piece of state rather than two
+  // booleans: the two are mutually exclusive, and a pair of flags would allow
+  // an impossible state where both modals mount at once — two narrators
+  // talking over each other.
+  const [demo, setDemo] = useState<null | "theft" | "servicing">(null);
 
   const toggle = (i: number) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -99,10 +104,40 @@ export default function HelpScreen() {
         <Card style={styles.demoCard}>
           <Text style={styles.demoTitle}>See how it works</Text>
           <Text style={styles.demoBody}>
-            A short walkthrough of what happens from registering your vehicle to a camera spotting
-            it. Available in English and Nepali, and it can read itself aloud.
+            Two walkthroughs, one for each half of the platform. Both are available in English and
+            Nepali, and both can read themselves aloud.
           </Text>
-          <Button title="Play walkthrough" onPress={() => setShowDemo(true)} />
+
+          {/* Two named choices rather than one generic "Play walkthrough": the
+              app does two quite different things, and the previous single
+              button only ever offered the theft one. */}
+          <Pressable
+            style={styles.demoPick}
+            onPress={() => setDemo("servicing")}
+            accessibilityRole="button"
+          >
+            <Text style={styles.demoPickIcon}>🔧</Text>
+            <View style={styles.demoPickText}>
+              <Text style={styles.demoPickTitle}>Getting a vehicle serviced</Text>
+              <Text style={styles.demoPickSub}>
+                Booking, pickup, the parts estimate you approve, and the vehicle coming back
+              </Text>
+            </View>
+          </Pressable>
+
+          <Pressable
+            style={styles.demoPick}
+            onPress={() => setDemo("theft")}
+            accessibilityRole="button"
+          >
+            <Text style={styles.demoPickIcon}>🎥</Text>
+            <View style={styles.demoPickText}>
+              <Text style={styles.demoPickTitle}>Recovering a stolen vehicle</Text>
+              <Text style={styles.demoPickSub}>
+                Registering a plate, reporting a theft, and how the cameras find it
+              </Text>
+            </View>
+          </Pressable>
         </Card>
 
         <Text style={styles.h2}>Common questions</Text>
@@ -196,7 +231,8 @@ export default function HelpScreen() {
         </Card>
       </Screen>
 
-      {showDemo ? <HowItWorks onClose={() => setShowDemo(false)} /> : null}
+      {demo === "theft" ? <HowItWorks onClose={() => setDemo(null)} /> : null}
+      {demo === "servicing" ? <ServicingWalkthrough onClose={() => setDemo(null)} /> : null}
     </>
   );
 }
@@ -216,6 +252,20 @@ const styles = StyleSheet.create({
   demoCard: { gap: spacing.sm, marginBottom: spacing.xl },
   demoTitle: { color: colors.slate900, fontSize: 16, fontWeight: "800" },
   demoBody: { color: colors.slate600, fontSize: 13.5, lineHeight: 20 },
+  demoPick: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.slate200,
+    backgroundColor: colors.bg,
+  },
+  demoPickIcon: { fontSize: 22 },
+  demoPickText: { flex: 1 },
+  demoPickTitle: { color: colors.slate900, fontSize: 14, fontWeight: "800" },
+  demoPickSub: { color: colors.slate600, fontSize: 12, lineHeight: 17, marginTop: 2 },
 
   h2: { color: colors.slate900, fontSize: 17, fontWeight: "800", marginBottom: spacing.md },
 

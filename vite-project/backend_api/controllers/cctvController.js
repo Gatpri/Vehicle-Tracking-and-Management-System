@@ -52,7 +52,11 @@ const alertStolenSighting = async (sighting) => {
 export const processFrame = async ({ buffer, cameraId, location, tiles = false }) => {
   // A sighting with no text is still worth recording (the image is the
   // evidence), so a sidecar that's down degrades the scan instead of failing it.
-  const readPlate = analyzeFrame(buffer, { tiles }).catch((err) => {
+  // cameraId is passed through so the sidecar can vote the plate text across
+  // frames from this feed instead of trusting one frame's read. A manual
+  // upload has no cameraId and is read in isolation, which is correct: there
+  // is no history to vote over.
+  const readPlate = analyzeFrame(buffer, { tiles, cameraId }).catch((err) => {
     console.error("ANPR service unavailable, recording sighting without a plate read:", err.message);
     return { detected: false, box: null, text: "", textConfidence: 0 };
   });
@@ -225,7 +229,13 @@ export const detectCameraPreview = async (req, res) => {
     }
 
     const buffer = await fetchFrame(camera.streamUrl);
-    const read = await analyzeFrame(buffer, { tiles: camera.tiledScan });
+    // This endpoint is polled ~every 1.5s against a fixed camera, which is
+    // exactly the case multi-frame voting exists for: consecutive frames of
+    // the same vehicle, each with different character misses.
+    const read = await analyzeFrame(buffer, {
+      tiles: camera.tiledScan,
+      cameraId: String(camera._id),
+    });
 
     const normalized = normalizePlate(read.text);
     const matchedVehicle = normalized ? await Vehicle.findOne({ normalizedPlate: normalized }) : null;

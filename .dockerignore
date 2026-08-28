@@ -28,3 +28,39 @@ out
 .turbo
 .yarn/cache
 .yarn/unplugged
+
+# --- Build-context trimming ---
+# Everything below is either huge, secret, or rebuilt inside the image. Keeping
+# it out shrinks the context Docker uploads on every build.
+
+# Dependency trees (each stage runs its own install)
+**/node_modules
+
+# Expo/React Native native + local build output. Dockerfile.mobile does a web
+# export only; the android/ project and .expo cache are never read.
+mobile/android
+mobile/ios
+mobile/.expo
+mobile/expo-qr.png
+**/web-build
+
+# Model weights (~42MB) are bind-mounted read-only at /app/weights by
+# docker-compose, deliberately not baked into the image.
+yolo_weights
+
+# Secrets. Dockerfile.frontend copies the root .env explicitly at build time
+# for VITE_* inlining and deletes it before the runtime stage; nothing else
+# should ever see these.
+.env.bak.*
+**/serviceAccountKey.json
+
+# Docs, scripts and test assets that no runtime imports
+*.md
+!vite-project/anpr_service/README.md
+docker-start.bat
+docker-start.ps1
+**/tests
+**/__tests__
+**/*.test.js
+**/*.test.py
+.claude

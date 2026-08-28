@@ -44,6 +44,8 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from ultralytics import YOLO
 
+from tracking import TrackerRegistry
+
 # Import Gemini Flash 2.5 (+ Mistral fallback) sentiment analyzer
 try:
     from llm_sentiment import analyze_sentiment as llm_analyze_sentiment
@@ -56,14 +58,23 @@ except ImportError:
 WEIGHTS_DIR = Path(
     os.environ.get("ANPR_WEIGHTS_DIR", r"C:\Users\sauga\Downloads\8th sem Proj.v2i.yolov11\weights")
 )
-PLATE_WEIGHTS = WEIGHTS_DIR / "plate_detector.pt"
+# Stage 1 prefers the Nepal-specific detector when it is present.
+#
+# The stock plate_detector.pt was never trained on Nepali data — MODEL_REPORT
+# names this as a known limitation — and measured on real Kathmandu traffic it
+# scored ~0.28 on genuine plates while scoring 0.75 on burnt-in overlay
+# graphics. plate_detector_nepali.pt is that same model fine-tuned on 6,927
+# Nepali plate images. Falling back keeps the service running on a machine
+# that only has the original weights.
+NEPALI_PLATE_WEIGHTS = WEIGHTS_DIR / "plate_detector_nepali.pt"
+PLATE_WEIGHTS = NEPALI_PLATE_WEIGHTS if NEPALI_PLATE_WEIGHTS.exists() else WEIGHTS_DIR / "plate_detector.pt"
 CHAR_WEIGHTS = WEIGHTS_DIR / "char_reader.pt"
 UNIFIED_WEIGHTS = WEIGHTS_DIR / "char_unified.pt"
 
 # Plates narrower than this carry too few pixels per character to read.
 MIN_PLATE_W, MIN_PLATE_H = 40, 16
 
-for required in (PLATE_WEIGHTS, CHAR_WEIGHTS):
+for required in (PLATE_WEIGHTS, CHAR_WEIGHTS):  # noqa: B007
     if not required.exists():
         raise SystemExit(
             f"Missing weights: {required}\n"
@@ -79,6 +90,35 @@ unified_model = YOLO(str(UNIFIED_WEIGHTS)) if UNIFIED_WEIGHTS.exists() else None
 # threadpool — serialize it so parallel camera polls queue instead of corrupting
 # each other's CUDA state.
 infer_lock = threading.Lock()
+
+# Multi-frame voting state, one tracker per camera. Frames arrive as separate
+# HTTP requests, so this is what turns a stream of independent stills back
+# into a video the pipeline can reason over. See tracking.py.
+trackers = TrackerRegistry()
+
+
+def warm_models():
+    """Run one throwaway inference through every model at import time.
+
+    The first predict() on a model builds CUDA graphs, allocates workspace and
+    compiles kernels. Measured here, that made the first real request take
+    ~21s against ~1.2s for every one after it — so without this the first
+    camera frame after a restart appears to hang, and a caller with a timeout
+    records it as a failure. Paying it at startup, once, on a blank image, is
+    strictly better than making a user pay it.
+    """
+    blank = np.zeros((320, 320, 3), np.uint8)
+    strip = np.zeros((64, 200, 3), np.uint8)
+    try:
+        plate_model.predict(blank, device=device, half=(device == 0), verbose=False)
+        char_model.predict([strip], device=device, half=(device == 0), verbose=False)
+        if unified_model is not None:
+            unified_model.predict([strip], device=device, half=(device == 0), verbose=False)
+    except Exception as exc:  # never block startup on a warm-up failure
+        print(f"Model warm-up skipped: {exc}")
+
+
+warm_models()
 
 
 def box_iou(a, b):
@@ -127,10 +167,38 @@ def detect_plates(frame, conf, imgsz, tiled=False):
     return [((int(a), int(b), int(c), int(d)), cf) for a, b, c, d, cf in kept]
 
 
+def read_plates_batch(model, crops, conf):
+    """Stage 2 over every crop in one frame, in a single predict() call.
+
+    Ultralytics accepts a list of images and batches them onto the GPU. Calling
+    it once per crop — which is what this did before — pays the full
+    preprocess/postprocess and kernel-launch overhead per plate, and in dense
+    traffic there are five to eight plates per frame. Batching is the
+    difference between the pipeline being usable on live video and not.
+
+    Returns a list of (text, mean confidence), aligned with `crops`.
+    """
+    if not crops:
+        return []
+    results = model.predict(crops, conf=conf, device=device,
+                            half=(device == 0), verbose=False)
+    return [_decode_chars(model, r) for r in results]
+
+
 def read_plate(model, plate_img, conf):
-    """Stage 2. Returns (text, mean character confidence) in plate reading order."""
+    """Stage 2 for a single crop. Returns (text, mean character confidence)."""
     results = model.predict(plate_img, conf=conf, device=device,
                             half=(device == 0), verbose=False)[0]
+    return _decode_chars(model, results)
+
+
+def _decode_chars(model, results):
+    """Turn one crop's character detections into plate text.
+
+    Shared by the single-crop and batched paths so the two cannot drift: row
+    grouping, reading order and dedup are the fiddly part, and having two
+    copies of it would guarantee they disagree eventually.
+    """
     if len(results.boxes) == 0:
         return "", 0.0
 
@@ -221,6 +289,41 @@ def encode_crop(crop):
         return None
 
 
+def read_best_batch(crops, char_conf):
+    """Batched counterpart of read_best.
+
+    The primary reader runs over every crop in one call. Only the crops whose
+    read looks suspect are re-run through the unified model, and those go as a
+    second batch rather than one call each — on a frame of ordinary traffic
+    most plates are Devanagari and never need the challenger at all.
+    """
+    if not crops:
+        return []
+
+    primary = read_plates_batch(char_model, crops, char_conf)
+    if unified_model is None:
+        return primary
+
+    suspect_idx, suspect_crops = [], []
+    for i, (text, conf) in enumerate(primary):
+        tokens = text.split()
+        if len(tokens) < 3 or all(t.isdigit() for t in tokens) or conf < 0.7:
+            suspect_idx.append(i)
+            suspect_crops.append(crops[i])
+
+    if not suspect_crops:
+        return primary
+
+    out = list(primary)
+    for i, (alt, alt_conf) in zip(suspect_idx, read_plates_batch(unified_model, suspect_crops, char_conf)):
+        text, conf = primary[i]
+        # Same rule as read_best: the specialist is the incumbent and a
+        # challenger must beat it by a clear margin to override.
+        if len(alt.replace(" ", "")) * alt_conf > len(text.replace(" ", "")) * conf * 1.2:
+            out[i] = (alt, alt_conf)
+    return out
+
+
 def read_best(crop, char_conf):
     """Primary 38-class Devanagari reader, with the unified 57-class model
     challenging it when the read looks like an embossed (Latin) plate."""
@@ -244,11 +347,14 @@ async def health(request):
         "device": "gpu" if device == 0 else "cpu",
         "weightsDir": str(WEIGHTS_DIR),
         "embossedReader": unified_model is not None,
+        "plateWeights": PLATE_WEIGHTS.name,
+        "nepaliPlateDetector": PLATE_WEIGHTS.name == "plate_detector_nepali.pt",
+        "tracking": trackers.stats(),
         "llmSentiment": LLM_SENTIMENT_AVAILABLE,
     })
 
 
-def analyze(body, plate_conf, char_conf, imgsz, tiles):
+def analyze(body, plate_conf, char_conf, imgsz, tiles, camera_id=None):
     raw = np.frombuffer(body, np.uint8)
     frame = cv2.imdecode(raw, cv2.IMREAD_COLOR)
     if frame is None:
@@ -261,7 +367,8 @@ def analyze(body, plate_conf, char_conf, imgsz, tiles):
     with infer_lock:
         found = detect_plates(frame, plate_conf, imgsz, tiled=tiles)
 
-        plates = []
+        # Collect every crop first, then read them all in one batched call.
+        boxes, crops = [], []
         for (x1, y1, x2, y2), conf in found:
             if x2 - x1 < MIN_PLATE_W or y2 - y1 < MIN_PLATE_H:
                 continue
@@ -270,7 +377,13 @@ def analyze(body, plate_conf, char_conf, imgsz, tiles):
             crop = frame[max(0, y1 - py):y2 + py, max(0, x1 - px):x2 + px]
             if crop.size == 0:
                 continue
-            text, text_conf = read_best(crop, char_conf)
+            boxes.append(((x1, y1, x2, y2), conf))
+            crops.append(crop)
+
+        reads = read_best_batch(crops, char_conf)
+
+        plates = []
+        for ((x1, y1, x2, y2), conf), crop, (text, text_conf) in zip(boxes, crops, reads):
             plates.append({
                 "box": {
                     "x": (x1 + x2) / 2,
@@ -285,7 +398,38 @@ def analyze(body, plate_conf, char_conf, imgsz, tiles):
                 # UI can show what was read rather than asking the operator to
                 # squint at a box on the full frame.
                 "cropImage": encode_crop(upscale_for_display(crop)),
+                "_box": (x1, y1, x2, y2),
+                "_tokens": text.split(),
+                "_conf": text_conf,
             })
+
+    # Multi-frame voting. Only when the caller says which camera this frame came
+    # from: without that key, frames from different roads would vote on each
+    # other's plates, and a one-off upload has no history to vote over anyway.
+    if camera_id and plates:
+        voted = trackers.get(camera_id).update(
+            [(p["_box"], p["_tokens"], p["_conf"]) for p in plates]
+        )
+        for p, v in zip(plates, voted):
+            # The single-frame read stays on the record: when the vote and the
+            # frame disagree, an operator needs to see both rather than be told
+            # only the conclusion.
+            p["frameText"] = p["text"]
+            p["frameTextConfidence"] = p["textConfidence"]
+            if v["text"]:
+                p["text"] = v["text"]
+                p["textConfidence"] = v["confidence"] * 100
+            p["track"] = {
+                "id": v["trackId"],
+                "sightings": v["sightings"],
+                "stable": v["stable"],
+                "ageSeconds": v["ageSeconds"],
+            }
+
+    for p in plates:
+        p.pop("_box", None)
+        p.pop("_tokens", None)
+        p.pop("_conf", None)
 
     if not plates:
         # Stage 1 is trained on full scenes, so it finds nothing when handed an
@@ -342,6 +486,10 @@ async def detect(request):
         float(q.get("charConf", 0.25)),
         int(q.get("imgsz", 1280)),
         q.get("tiles", "false").lower() == "true",
+        # Pass ?cameraId=... to enable multi-frame voting for that feed. Absent,
+        # each frame is read on its own exactly as before, which is the right
+        # behaviour for a one-off upload.
+        q.get("cameraId") or None,
     )
     return JSONResponse(result)
 

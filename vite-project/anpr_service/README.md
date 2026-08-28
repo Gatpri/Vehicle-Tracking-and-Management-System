@@ -10,7 +10,8 @@ The service loads three files from `ANPR_WEIGHTS_DIR` (default:
 
 | File | Role |
 |---|---|
-| `plate_detector.pt` | Stage 1 — locates plates in the frame |
+| `plate_detector_nepali.pt` | Stage 1 — **preferred**, fine-tuned on Nepali roads |
+| `plate_detector.pt` | Stage 1 — generic fallback when the above is absent |
 | `char_reader.pt` | Stage 2 — 38-class Devanagari character reader (primary) |
 | `char_unified.pt` | 57-class reader, challenges the primary on suspected embossed plates |
 
@@ -37,6 +38,41 @@ Or from `vite-project/`: `npm run anpr`.
 | `charConf` | 0.25 | Stage-2 confidence threshold |
 | `imgsz` | 1280 | Stage-1 analysis resolution; higher finds smaller plates |
 | `tiles` | false | Also scan four overlapping tiles — finds small/many plates, costs time |
+| `cameraId` | none | Enables multi-frame voting for that feed (see below) |
+
+## Multi-frame voting
+
+`MODEL_REPORT.md` records the character reader at recall ~0.79 — roughly one
+character in five is missed on hard images — and notes that this is *"mitigated
+in practice by multi-frame voting, since misses differ per frame."* That
+mitigation lives in `tracking.py`.
+
+Pass `?cameraId=<id>` and the service matches each plate box to a track by IoU,
+accumulates every reading taken of it, and votes **per character position**
+across those readings. Whole-string voting would need the same complete misread
+to recur before it won; character voting recovers a plate no single frame ever
+read correctly, which is the common case when the misses are uncorrelated.
+
+A plate reports `track.stable` only once it has been read consistently across
+several frames — the bar an alert should clear before accusing someone of
+driving a stolen vehicle. Without a `cameraId` every frame is read in isolation,
+which is the right behaviour for a one-off upload.
+
+Both `frameText` (this frame alone) and `text` (the vote) come back, so an
+operator can see where the two disagree.
+
+## Stage-1 training
+
+Stage 2 is trained on 5,298 Nepali images. Stage 1 was not — it shipped as a
+generic `License_Plate` detector, and `MODEL_REPORT.md` lists that as a known
+limitation. Measured on real Kathmandu traffic it scored ~0.28 on genuine
+plates. `training/` holds what fixes it:
+
+| File | Purpose |
+|---|---|
+| `build_plate_dataset.py` | Merges the two source datasets into one single-class set |
+| `plate_detector_colab.ipynb` | Trains it on a Colab T4, with before/after metrics |
+| `benchmark_video.py` | Measures the pipeline on real traffic footage |
 
 ```json
 {

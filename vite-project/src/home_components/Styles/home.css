@@ -61,6 +61,19 @@
 .uh-btn-ghost { background: var(--slate-100); color: var(--navy-900); }
 .uh-btn-ghost:hover { background: var(--slate-200); }
 
+/* The emergency CTA. Tinted rather than solid-filled so it reads as urgent
+   without competing with the primary "Book a Service" button beside it. */
+.uh-btn-alert {
+  background: rgba(249, 115, 22, 0.10);
+  color: #c2410c;
+  border: 1px solid rgba(249, 115, 22, 0.35);
+}
+.uh-btn-alert:hover {
+  background: rgba(249, 115, 22, 0.18);
+  border-color: var(--orange-500);
+}
+.uh-btn-alert svg { color: var(--orange-500); }
+
 .uh-btn-outline { background: transparent; color: var(--navy-900); border: 1.5px solid var(--slate-200); }
 .uh-btn-outline:hover { border-color: var(--blue-600); color: var(--blue-700); }
 
@@ -120,7 +133,7 @@
 .uh-links a:hover { color: var(--blue-700); }
 .uh-links-mobile-user { display: none; }
 
-.uh-nav-right { display: flex; align-items: center; }
+.uh-nav-right { display: flex; align-items: center; gap: 14px; }
 .uh-user { display: flex; align-items: center; gap: 12px; }
 .uh-user-name { font-weight: 500; font-size: 14px; color: var(--slate-600); }
 .uh-avatar {
@@ -462,3 +475,489 @@
   cursor: pointer;
 }
 .uh-footer-link:hover { color: #fff; }
+
+/* ==========================================================================
+   Refinements retained after the 3D hero was reverted to the static image.
+   Everything here styles real-data UI that stayed on the page; the .uh3d-*
+   canvas rules were removed along with the canvas.
+   ========================================================================== */
+
+/* Alert state for the hero chip dot when a vehicle is flagged stolen. */
+.uh-live-dot.is-alert { background: var(--orange-500); box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.18); }
+
+/* Stat band tiles are <Link>s, so they need hover affordance the old static
+   <div>s did not. The band's own background is set further down, where it is
+   given the page's one saturated gradient. */
+.uh-stat {
+  padding: 14px 10px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+.uh-stat:hover {
+  transform: translateY(-3px);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.uh-stat strong.is-alert { color: var(--orange-500); }
+
+/* Feature cards: subtle depth on hover. */
+.uh-grid { perspective: 1200px; }
+.uh-card {
+  transform-style: preserve-3d;
+  transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.28s ease, border-color 0.28s ease;
+  will-change: transform;
+}
+.uh-card:hover {
+  transform: translateY(-6px) rotateX(4deg) rotateY(-4deg) scale(1.015);
+  box-shadow: 0 26px 50px -18px rgba(15, 23, 42, 0.34);
+  border-color: rgba(37, 99, 235, 0.35);
+}
+.uh-card-icon { transform: translateZ(28px); transition: transform 0.28s ease; }
+
+/* CCTV readout when one of the user's vehicles is flagged. */
+.uh-match.is-alert { color: var(--orange-500); }
+
+@media (prefers-reduced-motion: reduce) {
+  .uh-card, .uh-card-icon, .uh-stat { transition: none; }
+  .uh-card:hover, .uh-stat:hover { transform: none; }
+}
+
+/* ==========================================================================
+   Servicing showcase — the workshop counterpart to AI Security.
+   Graphite rather than the AI band's near-black navy: distinct enough that the
+   two sections read as separate chapters, close enough that they read as one
+   product. Both are dark, so the page alternates light/dark down its length.
+   ========================================================================== */
+.uh-svc {
+  padding: 88px 24px;
+  color: #fff;
+  background:
+    radial-gradient(85% 120% at 12% 0%, rgba(37, 99, 235, 0.22), transparent 58%),
+    radial-gradient(70% 110% at 88% 100%, rgba(249, 115, 22, 0.14), transparent 55%),
+    #16202f;
+  /* No top border: the heading above shares this ground, so a line there
+     would cut the chapter apart again. The bottom border is the real seam —
+     the point where servicing ends and AI security begins. */
+  border-bottom: 1px solid #2a3f66;
+}
+.uh-svc-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 60px; align-items: center;
+}
+.uh-svc-copy h2 { color: #fff; font-size: 32px; margin: 14px 0 16px; }
+.uh-svc-copy > p { color: #94a3b8; font-size: 15.5px; max-width: 480px; }
+.uh-svc-cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
+
+.uh-svc-panel { display: flex; flex-direction: column; gap: 18px; }
+
+/* --- Job card ------------------------------------------------------------ */
+.uh-jobcard {
+  background: var(--navy-900);
+  border: 1px solid #223357;
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.uh-jobcard-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 18px;
+}
+.uh-jobcard-title { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700; color: #fff; }
+.uh-jobcard-title svg { width: 16px; height: 16px; color: var(--orange-500); }
+.uh-jobcard-ref { font-size: 12px; color: #64748b; font-weight: 600; letter-spacing: 0.5px; }
+
+/* Progress rail. The connecting line sits behind the dots via ::before on the
+   row, so stages stay evenly spaced whatever the label length. */
+.uh-jobrail { display: flex; justify-content: space-between; position: relative; margin-bottom: 18px; }
+.uh-jobrail::before {
+  content: ""; position: absolute; top: 9px; left: 9%; right: 9%;
+  height: 2px; background: #223357;
+}
+.uh-jobstage { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; }
+.uh-jobstage-dot {
+  width: 19px; height: 19px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--navy-900); border: 2px solid #2c3f66;
+}
+.uh-jobstage-dot svg { width: 10px; height: 10px; color: #041b0d; }
+.uh-jobstage-label { font-size: 10.5px; font-weight: 600; color: #64748b; text-align: center; }
+.uh-jobstage.is-done .uh-jobstage-dot { background: var(--green-500); border-color: var(--green-500); }
+.uh-jobstage.is-done .uh-jobstage-label { color: #94a3b8; }
+.uh-jobstage.is-active .uh-jobstage-dot {
+  background: var(--blue-600); border-color: var(--blue-600);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.22);
+}
+.uh-jobstage.is-active .uh-jobstage-label { color: #93b4fc; }
+
+.uh-jobcard-foot {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  border-top: 1px solid #1c2b49; padding-top: 14px;
+  font-size: 13px; color: #94a3b8;
+}
+.uh-jobcard-foot strong { color: #fff; }
+.uh-jobcard-status { color: var(--orange-500); font-weight: 600; white-space: nowrap; }
+.uh-jobcard-empty { color: #64748b; }
+
+/* Service types genuinely offered by workshops on the platform. */
+.uh-svc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.uh-svc-chip {
+  font-size: 12.5px; font-weight: 600;
+  color: #cbd5e1; background: rgba(255, 255, 255, 0.05);
+  border: 1px solid #223357; border-radius: 999px;
+  padding: 6px 13px;
+}
+
+@media (max-width: 900px) {
+  .uh-svc-inner { grid-template-columns: 1fr; gap: 40px; }
+}
+@media (max-width: 620px) {
+  .uh-svc-copy h2 { font-size: 26px; }
+  .uh-jobstage-label { font-size: 9.5px; }
+}
+
+/* ==========================================================================
+   Page-wide background system.
+
+   The page previously ran white → navy → white → light → dark → dark →
+   blue/orange gradient, which read as unrelated blocks stacked together. The
+   rhythm below alternates deliberately instead: light surface, dark band,
+   light surface, dark band — each dark section tinted differently (navy for
+   data, graphite for servicing, near-black for AI) so they are distinguishable
+   without being unrelated. Every boundary gets a hairline rule so the eye sees
+   an intentional edge rather than a colour change.
+   ========================================================================== */
+
+/* Hero: a soft mesh instead of one flat radial, so the fold has depth without
+   competing with the copy. */
+.uh-hero {
+  position: relative;
+  background:
+    radial-gradient(760px 420px at 88% -12%, rgba(37, 99, 235, 0.10), transparent 70%),
+    radial-gradient(520px 360px at 4% 8%, rgba(249, 115, 22, 0.06), transparent 70%),
+    linear-gradient(180deg, #ffffff 0%, #fbfcfe 60%, var(--bg-alt) 100%);
+  padding: 76px 24px 52px;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+/* Stat band: the one saturated stripe on the page.
+   It sits directly above the closing band, so this gradient is what separates
+   the dark workflow chapter from the dark closing band — without it the two
+   would run into each other. The blue-to-orange run also states the page's two
+   accents in one place, which is why it is used here and nowhere else.
+
+   Placed last on the page, between the closing band and the footer, so it
+   reads as a summing-up rather than as a header stat strip. */
+.uh-stats {
+  background: linear-gradient(100deg, var(--blue-700) 0%, #6d5ba8 52%, var(--orange-500) 100%);
+  border-top: none;
+  border-bottom: none;
+  padding: 34px 24px;
+}
+.uh-stats .uh-stat strong { color: #fff; }
+.uh-stats .uh-stat span { color: rgba(255, 255, 255, 0.82); }
+.uh-stats .uh-stat:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+/* On this ground an orange "alert" number would vanish into the right-hand end
+   of the gradient, so alerts go white and lean on weight instead of hue. */
+.uh-stats .uh-stat strong.is-alert { color: #fff; text-shadow: 0 0 18px rgba(255, 255, 255, 0.55); }
+
+/* Feature grid sits on plain white so the cards carry the contrast. */
+.uh-section { background: var(--bg); }
+
+/* Process band: the light counterpart between two dark sections. */
+.uh-section-alt {
+  background:
+    radial-gradient(600px 300px at 50% 0%, rgba(37, 99, 235, 0.05), transparent 70%),
+    var(--bg-alt);
+  border-top: 1px solid var(--slate-200);
+  border-bottom: 1px solid var(--slate-200);
+}
+
+/* --- Wallet chip in the navbar ------------------------------------------- */
+.uh-wallet-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 14px; border-radius: 999px;
+  background: rgba(37, 99, 235, 0.07);
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  color: var(--blue-700);
+  font-size: 13.5px; font-weight: 700;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.uh-wallet-chip:hover { background: rgba(37, 99, 235, 0.12); border-color: rgba(37, 99, 235, 0.34); }
+.uh-wallet-chip svg { width: 15px; height: 15px; }
+
+/* --- Closing band, split into the two pillars ---------------------------- */
+/* The old blue→orange diagonal gradient was the loudest thing on the page and
+   fought both adjacent sections. This is the same navy family as the rest,
+   with the two accent colours used only as tints at the far edges. */
+.uh-cta {
+  background:
+    radial-gradient(60% 130% at 8% 50%, rgba(37, 99, 235, 0.28), transparent 62%),
+    radial-gradient(60% 130% at 92% 50%, rgba(249, 115, 22, 0.22), transparent 62%),
+    var(--navy-950);
+  border-top: 1px solid #1b2a4a;
+  padding: 64px 24px;
+}
+.uh-cta-inner {
+  max-width: 1000px; margin: 0 auto;
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  gap: 44px; align-items: center; text-align: left;
+}
+.uh-cta-half { display: flex; flex-direction: column; align-items: flex-start; }
+.uh-cta-tag {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase;
+  color: #93b4fc; margin-bottom: 12px;
+}
+.uh-cta-tag svg { width: 14px; height: 14px; }
+.uh-cta-half:last-child .uh-cta-tag { color: #fdba74; }
+.uh-cta-inner h2 { color: #fff; font-size: 25px; margin-bottom: 10px; line-height: 1.25; }
+.uh-cta-inner p { color: #94a3b8; font-size: 14.5px; margin-bottom: 22px; }
+/* The divider between the halves. */
+.uh-cta-rule { width: 1px; align-self: stretch; background: #1e2f52; }
+
+@media (max-width: 900px) {
+  .uh-flows { grid-template-columns: 1fr; gap: 20px; }
+  .uh-cta-inner { grid-template-columns: 1fr; gap: 34px; }
+  /* A horizontal rule reads correctly once the halves stack. */
+  .uh-cta-rule { width: auto; height: 1px; align-self: auto; }
+}
+@media (max-width: 620px) {
+  .uh-wallet-chip { display: none; }
+  .uh-cta-inner h2 { font-size: 21px; }
+}
+
+/* ==========================================================================
+   How-it-works lead-in + the numbered stage lists inside the two panels.
+   ========================================================================== */
+
+/* The heading band that introduces the Servicing and AI sections below. Sits
+   directly above the servicing panel, so it carries no bottom border of its
+   own — the panel's own top edge is the divider. */
+/* The heading is DARK, like the two sections it introduces.
+   It was light before, which broke the chapter in half: a white band followed
+   by two dark ones read as "a heading, then two unrelated sections". Sharing
+   the dark ground — and dropping the border between the heading and the first
+   panel — makes the three read as one block with a title on top. */
+.uh-flowhead {
+  background:
+    radial-gradient(700px 320px at 50% 0%, rgba(37, 99, 235, 0.16), transparent 70%),
+    linear-gradient(180deg, #101a2c 0%, #141e2d 100%);
+  border-top: 1px solid var(--slate-200);
+  padding: 74px 24px 34px;
+  color: #fff;
+}
+.uh-flowhead .uh-section-head { margin-bottom: 0; max-width: 640px; }
+.uh-flowhead h2 { color: #fff; }
+.uh-flowhead p { color: #94a3b8; }
+/* The kicker needs the light-on-dark treatment the AI section already uses. */
+.uh-flowhead .uh-kicker {
+  color: #93b4fc;
+  background: rgba(37, 99, 235, 0.16);
+}
+
+/* A short connector under the heading, pointing into the two panels: a visible
+   "these belong to me" line rather than relying on colour alone. */
+.uh-flowhead::after {
+  content: "";
+  display: block;
+  width: 2px; height: 34px;
+  margin: 26px auto -34px;
+  background: linear-gradient(180deg, rgba(147, 180, 252, 0.55), transparent);
+}
+
+/* Numbered stages. Replaces the tick list in both panels: these sections now
+   carry the how-it-works content, so the steps need to read as a sequence
+   rather than as unordered features. */
+.uh-stagelist {
+  list-style: none;
+  margin: 24px 0 28px;
+  padding: 0;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.uh-stagelist li {
+  display: flex; align-items: center; gap: 13px;
+  font-size: 14.5px; color: #cbd5e1;
+}
+.uh-stagenum {
+  flex-shrink: 0;
+  width: 23px; height: 23px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 11.5px; font-weight: 700;
+  background: rgba(37, 99, 235, 0.18);
+  color: #93b4fc;
+  border: 1px solid rgba(37, 99, 235, 0.34);
+}
+/* The AI half runs orange, matching its section accent and the closing band. */
+.uh-stagelist.is-ai .uh-stagenum {
+  background: rgba(249, 115, 22, 0.16);
+  color: #fdba74;
+  border-color: rgba(249, 115, 22, 0.32);
+}
+
+/* --- Panel/copy balance --------------------------------------------------
+   The servicing panel is a short job card while the copy beside it is long,
+   which left a tall empty gap under the card. Centring both columns on the
+   grid row removes it without inventing filler content. */
+.uh-svc-inner,
+.uh-ai-inner { align-items: center; }
+.uh-svc-panel,
+.uh-ai-panel { align-self: center; }
+
+/* Both sections keep the same rhythm now that both carry a stage list. */
+.uh-ai { padding: 88px 24px; }
+.uh-ai-copy h2,
+.uh-svc-copy h2 { max-width: 15ch; }
+.uh-ai-copy > p,
+.uh-svc-copy > p { margin-bottom: 4px; }
+
+/* Two buttons in the AI panel now, same as servicing. */
+.uh-ai-copy .uh-svc-cta { margin-top: 0; }
+
+@media (max-width: 900px) {
+  .uh-flowhead { padding: 60px 24px 44px; }
+  .uh-ai-copy h2, .uh-svc-copy h2 { max-width: none; }
+}
+
+/* ==========================================================================
+   Separating the two workflow panels.
+   They were #16202f and #0a1120 — close enough that the boundary between them
+   read as a rendering artefact rather than a deliberate division. The servicing
+   panel now carries a distinctly cooler blue-slate and the AI panel a colder
+   near-black, and each gets a corner glow in its own accent so the eye can
+   tell at a glance which half it is looking at.
+   ========================================================================== */
+.uh-svc {
+  background:
+    radial-gradient(760px 380px at 6% 8%, rgba(37, 99, 235, 0.26), transparent 62%),
+    radial-gradient(560px 300px at 96% 92%, rgba(249, 115, 22, 0.10), transparent 58%),
+    linear-gradient(165deg, #16233c 0%, #172231 100%);
+}
+.uh-ai {
+  background:
+    radial-gradient(720px 360px at 94% 10%, rgba(249, 115, 22, 0.16), transparent 60%),
+    radial-gradient(620px 320px at 4% 88%, rgba(37, 99, 235, 0.14), transparent 58%),
+    #080e1a;
+}
+
+/* Each panel is numbered, so the pair reads as "1 of 2, 2 of 2" under the one
+   heading instead of as two standalone sections that happen to be adjacent. */
+.uh-partnum {
+  /* flex, not inline-flex: the kicker below is inline-block, so an inline
+     label would sit beside it instead of above it. */
+  display: flex; align-items: center; gap: 9px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 14px;
+}
+.uh-partnum::before {
+  content: "";
+  width: 26px; height: 1px;
+  background: currentColor;
+}
+
+/* A hairline at the very end of the chapter, closing it off before the
+   closing band starts. */
+.uh-ai { border-bottom: 1px solid #1b2a4a; }
+
+/* ==========================================================================
+   Panel interactivity.
+   Both workflow sections now respond to hover so they read as things you can
+   act on rather than as printed blocks.
+   ========================================================================== */
+
+/* The job card and the CCTV feed lift toward the viewer on hover. */
+.uh-jobcard,
+.uh-feed {
+  transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.3, 1),
+              box-shadow 0.28s ease,
+              border-color 0.28s ease;
+}
+.uh-svc-panel:hover .uh-jobcard,
+.uh-ai-panel:hover .uh-feed {
+  transform: translateY(-5px);
+  border-color: #34507f;
+  box-shadow: 0 26px 50px -22px rgba(0, 0, 0, 0.7);
+}
+
+/* Service-type chips ripple up as a group when the panel is hovered. */
+.uh-svc-chip {
+  transition: transform 0.22s ease, background 0.22s ease, border-color 0.22s ease;
+}
+.uh-svc-panel:hover .uh-svc-chip {
+  background: rgba(37, 99, 235, 0.14);
+  border-color: rgba(37, 99, 235, 0.4);
+}
+.uh-svc-chip:hover { transform: translateY(-3px); color: #fff; }
+
+.uh-heatmap-card {
+  transition: transform 0.28s ease, border-color 0.28s ease;
+}
+.uh-ai-panel:hover .uh-heatmap-card { transform: translateY(-3px); border-color: #34507f; }
+
+/* Stage rows highlight individually, so the list feels like a walkthrough you
+   can run your eye down rather than static text. */
+.uh-stagelist li {
+  padding: 4px 8px;
+  margin-left: -8px;
+  border-radius: 8px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.uh-stagelist li:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+.uh-stagenum { transition: transform 0.2s ease, background 0.2s ease; }
+.uh-stagelist li:hover .uh-stagenum { transform: scale(1.12); }
+
+/* ==========================================================================
+   Job card stage animation.
+   The rail cycles through the five stages when no booking is live. Transitions
+   are on the dot and label rather than driven by keyframes, so the same rules
+   also smooth a REAL status change arriving over the socket.
+   ========================================================================== */
+.uh-jobstage-dot {
+  transition: background 0.45s ease, border-color 0.45s ease,
+              box-shadow 0.45s ease, transform 0.45s ease;
+}
+.uh-jobstage-label { transition: color 0.45s ease; }
+.uh-jobstage.is-active .uh-jobstage-dot { transform: scale(1.15); }
+
+/* The active dot breathes so the eye finds the current stage immediately. */
+.uh-jobstage.is-active .uh-jobstage-dot { animation: uh-stage-pulse 1.9s ease-in-out infinite; }
+@keyframes uh-stage-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.22); }
+  50%      { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0.10); }
+}
+
+/* The connecting line fills up to the stage reached, drawn as a second layer
+   over the grey rail so no per-segment markup is needed.
+
+   :has() drives it, which every current browser supports (Chrome/Edge 105+,
+   Safari 15.4+, Firefox 121+). Where it is missing the rule is simply ignored:
+   the width stays 0 and the rail renders as the plain grey line it was before,
+   with the dots still showing state. A progressive enhancement, not a
+   dependency. */
+.uh-jobrail::after {
+  content: "";
+  position: absolute; top: 9px; left: 9%;
+  height: 2px; width: 0;
+  background: linear-gradient(90deg, var(--green-500), var(--blue-600));
+  transition: width 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.uh-jobrail:has(.uh-jobstage:nth-child(1).is-active)::after { width: 0; }
+.uh-jobrail:has(.uh-jobstage:nth-child(2).is-active)::after { width: 20.5%; }
+.uh-jobrail:has(.uh-jobstage:nth-child(3).is-active)::after { width: 41%; }
+.uh-jobrail:has(.uh-jobstage:nth-child(4).is-active)::after { width: 61.5%; }
+.uh-jobrail:has(.uh-jobstage:nth-child(5).is-active)::after { width: 82%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .uh-jobstage.is-active .uh-jobstage-dot { animation: none; }
+  .uh-jobcard, .uh-feed, .uh-svc-chip, .uh-heatmap-card,
+  .uh-jobstage-dot, .uh-jobstage-label, .uh-jobrail::after { transition: none; }
+  .uh-svc-panel:hover .uh-jobcard,
+  .uh-ai-panel:hover .uh-feed,
+  .uh-svc-chip:hover, .uh-ai-panel:hover .uh-heatmap-card { transform: none; }
+}

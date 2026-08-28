@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { getSocket } from "../lib/socket";
@@ -45,7 +46,15 @@ function SosPage() {
   const [message, setMessage] = useState("");
 
   // Which branch the SOS button opened, if any.
-  const [mode, setMode] = useState<SosMode>(null);
+  // Seeded from ?report=stolen so the homepage's "Report Stolen" button can
+  // land straight on the theft form instead of dropping people on the SOS
+  // screen to find it themselves. Read once as the initial value rather than
+  // synced continuously: after arriving, the tabs are the user's to change,
+  // and re-applying the param would fight them.
+  const [searchParams] = useSearchParams();
+  const [mode, setMode] = useState<SosMode>(
+    searchParams.get("report") === "stolen" ? "theft" : null
+  );
 
   // Theft report — moved here from the Safety page, which now shows only the
   // heatmap and the reports you have already filed.
@@ -63,7 +72,13 @@ function SosPage() {
         api.get("/vehicles/mine"),
       ]);
       setAlerts(alertRes.data.alerts);
-      setVehicles(vehicleRes.data.vehicles);
+      const mine = vehicleRes.data.vehicles;
+      setVehicles(mine);
+      // With exactly one vehicle there is nothing to choose between, so
+      // preselect it rather than making someone open a one-item dropdown
+      // while reporting a theft. Only when empty, so it never overwrites a
+      // choice already made.
+      if (mine.length === 1) setVehicleId((cur: string) => cur || mine[0]._id);
     } catch {
       toast.error("Failed to load alerts");
     } finally {
@@ -215,7 +230,7 @@ function SosPage() {
       </div>
 
       {mode === "theft" && (
-        <form className="uh-card" style={{ marginBottom: 24 }} onSubmit={handleReport}>
+        <form className="uh-card ap-sos-form-card" style={{ marginBottom: 24 }} onSubmit={handleReport}>
           <div className="uh-form-row">
             <div className="uh-field">
               <label htmlFor="vehicleId">Vehicle</label>

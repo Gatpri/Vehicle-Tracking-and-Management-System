@@ -1157,3 +1157,250 @@
      pause a <video>, and pretending otherwise would leave the one piece of
      motion this preference most obviously covers still running. */
 }
+
+/* ==========================================================================
+   ServicingDemo scenes (svcd-*).
+   Shares this file with the CCTV walkthrough on purpose: the dialog shell,
+   rail, captions and controls are the same component shape, so only the
+   per-scene artwork differs.
+   ========================================================================== */
+.svcd-art {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 10px; padding: 18px;
+}
+
+/* --- Workshop footage ---------------------------------------------------- */
+.svcd-video { padding: 0; }
+.svcd-clip {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Caption over the clip naming the stage, so a viewer who only glances still
+   knows which step of the workflow the footage belongs to. */
+.svcd-vlabel {
+  position: absolute; left: 12px; bottom: 12px;
+  background: rgba(10, 17, 32, 0.82);
+  border: 1px solid #2c3f66;
+  color: #e2e8f0;
+  font-size: 11.5px; font-weight: 600;
+  padding: 5px 11px; border-radius: 999px;
+  backdrop-filter: blur(4px);
+}
+
+/* --- 1. Workshop list ---------------------------------------------------- */
+.svcd-list { gap: 8px; }
+.svcd-shop {
+  width: min(300px, 100%);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-radius: 10px;
+  background: #101d38; border: 1px solid #1e2f52;
+  font-size: 12.5px; color: #cbd5e1;
+  opacity: 0; animation: svcd-rise 0.5s ease forwards;
+}
+.svcd-shop:nth-child(1) { animation-delay: 0.15s; }
+.svcd-shop:nth-child(2) { animation-delay: 0.35s; }
+.svcd-shop:nth-child(3) { animation-delay: 0.55s; }
+.svcd-shop.is-picked {
+  border-color: var(--blue-600, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+.svcd-shop-name { font-weight: 600; color: #fff; }
+.svcd-shop-rate { color: #fbbf24; font-weight: 600; }
+.svcd-book-btn {
+  margin-top: 6px; padding: 8px 20px; border-radius: 999px;
+  background: #1d4ed8; color: #fff; font-size: 12.5px; font-weight: 700;
+  opacity: 0; animation: svcd-rise 0.5s ease 0.95s forwards;
+}
+@keyframes svcd-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* --- 2. Rider on the map ------------------------------------------------- */
+.svcd-map { padding: 0; }
+.svcd-route {
+  position: absolute; left: 16%; right: 16%; top: 50%;
+  height: 3px; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, #2c3f66 0 10px, transparent 10px 18px);
+}
+.svcd-pin {
+  position: absolute; top: 50%; transform: translate(-50%, -160%);
+  font-size: 11px; font-weight: 700; color: #cbd5e1;
+  background: #101d38; border: 1px solid #2c3f66;
+  padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+}
+.svcd-pin-home { left: 16%; }
+.svcd-pin-shop { left: 84%; }
+/* The rider travels the dashed route between the two pins. */
+.svcd-rider {
+  position: absolute; top: 50%; left: 16%;
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--orange-500, #f97316);
+  box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.22);
+  transform: translate(-50%, -50%);
+  animation: svcd-ride 3.4s ease-in-out infinite;
+}
+@keyframes svcd-ride {
+  0%, 8%   { left: 16%; }
+  92%,100% { left: 84%; }
+}
+
+/* --- 5. Parts estimate --------------------------------------------------- */
+.svcd-quote { gap: 7px; }
+.svcd-quote-head {
+  align-self: flex-start; margin-left: 6px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+  text-transform: uppercase; color: #64748b;
+}
+.svcd-qrow {
+  width: min(320px, 100%);
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 9px;
+  background: #101d38; border: 1px solid #1e2f52;
+  opacity: 0; animation: svcd-rise 0.45s ease forwards;
+}
+.svcd-qbox {
+  width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0;
+  background: var(--green-500, #16a34a);
+}
+.svcd-qname { font-size: 12.5px; color: #e2e8f0; flex: 1; }
+.svcd-qbar { width: 46px; height: 6px; border-radius: 3px; background: #2c3f66; }
+/* The line the customer removed: the whole point of the step, so it is shown
+   struck through rather than simply absent. */
+.svcd-qrow.is-off { opacity: 0.4; }
+.svcd-qrow.is-off .svcd-qbox { background: #475569; }
+.svcd-qrow.is-off .svcd-qname { text-decoration: line-through; color: #64748b; }
+.svcd-qtotal {
+  margin-top: 4px; font-size: 11.5px; font-weight: 600; color: #93b4fc;
+  opacity: 0; animation: svcd-rise 0.5s ease 2.4s forwards;
+}
+
+/* --- 6. Payment unlocks the repair --------------------------------------- */
+.svcd-pay { gap: 18px; }
+.svcd-wallet {
+  width: min(260px, 100%);
+  padding: 14px 16px; border-radius: 12px;
+  background: #101d38; border: 1px solid #1e2f52;
+}
+.svcd-wallet-label { font-size: 11.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+/* Drains left-to-right as the payment leaves the wallet. */
+.svcd-wallet-bar {
+  display: block; height: 8px; margin-top: 9px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--blue-600, #2563eb), var(--orange-500, #f97316));
+  animation: svcd-drain 2.6s ease-in-out infinite;
+}
+@keyframes svcd-drain {
+  0%, 10%  { width: 100%; }
+  60%,100% { width: 34%; }
+}
+.svcd-lock {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; font-weight: 600; color: #86efac;
+}
+.svcd-lock-icon {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--green-500, #16a34a);
+  position: relative; flex-shrink: 0;
+  animation: svcd-pop 2.6s ease-in-out infinite;
+}
+/* A tick drawn from two borders — no extra svg needed. */
+.svcd-lock-icon::after {
+  content: ""; position: absolute; left: 7px; top: 4px;
+  width: 6px; height: 11px;
+  border: solid #04210f; border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg);
+}
+@keyframes svcd-pop {
+  0%, 45%   { transform: scale(0.85); opacity: 0.5; }
+  62%, 100% { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .svcd-art *, .svcd-rider, .svcd-wallet-bar, .svcd-lock-icon {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * The chooser (HowItWorksChooser) — the fork shown by the footer's
+ * "How It Works" before either walkthrough opens. It reuses the demo
+ * dialog's backdrop, header, language toggle and close button, so only
+ * the body below them is new. Narrower than the demos because it holds
+ * two tiles rather than an animation stage.
+ * ------------------------------------------------------------------ */
+.hiw-modal-chooser { width: min(680px, 100%); }
+
+.hiw-chooser-body { padding: 20px 24px 26px; }
+
+.hiw-chooser-lead {
+  margin: 0 0 18px;
+  color: #94a3b8;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.hiw-choices { display: grid; gap: 12px; }
+
+.hiw-choice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 18px;
+  text-align: left;
+  background: #0d1730;
+  border: 1px solid #223357;
+  border-radius: 14px;
+  color: #fff;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+.hiw-choice:hover,
+.hiw-choice:focus-visible {
+  background: #122043;
+  border-color: #3b5185;
+  transform: translateY(-2px);
+}
+
+.hiw-choice-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+.hiw-choice-icon svg { width: 24px; height: 24px; }
+
+/* The two halves are colour-coded the way they are elsewhere on the site:
+   blue for servicing, amber for the security/theft side. */
+.hiw-choice.is-recovery .hiw-choice-icon {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+}
+
+.hiw-choice-text { display: grid; gap: 4px; }
+.hiw-choice-text strong { font-size: 15px; font-weight: 650; }
+.hiw-choice-text span { font-size: 13px; line-height: 1.55; color: #94a3b8; }
+
+.hiw-choice-arrow {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: #64748b;
+  font-size: 18px;
+  transition: transform 160ms ease, color 160ms ease;
+}
+.hiw-choice:hover .hiw-choice-arrow { color: #fff; transform: translateX(3px); }
+
+@media (max-width: 560px) {
+  .hiw-chooser-body { padding: 18px 18px 22px; }
+  .hiw-choice { padding: 14px; gap: 12px; }
+  .hiw-choice-icon { width: 40px; height: 40px; }
+  .hiw-choice-arrow { display: none; }
+}

@@ -344,8 +344,11 @@ export const unsendMessage = async (req, res) => {
 // REST fallback alongside the primary "message:send" socket path.
 export const sendMessage = async (req, res) => {
   try {
-    const { text } = req.body;
-    if (!text?.trim()) return res.status(400).json({ success: false, message: "text is required" });
+    // Trimmed, not just checked — the socket path and message:edit both store
+    // the trimmed body, and storing the raw string here would make the same
+    // message look different depending on which path sent it.
+    const body = String(req.body.text ?? "").trim();
+    if (!body) return res.status(400).json({ success: false, message: "text is required" });
 
     const conversation = await Conversation.findById(req.params.id);
     if (!conversation) return res.status(404).json({ success: false, message: "Conversation not found" });
@@ -353,7 +356,7 @@ export const sendMessage = async (req, res) => {
     const allowed = await canAccessConversation(req.user, conversation);
     if (!allowed) return res.status(403).json({ success: false, message: "Forbidden" });
 
-    const message = await Message.create({ conversation: conversation._id, sender: req.user._id, text });
+    const message = await Message.create({ conversation: conversation._id, sender: req.user._id, text: body });
     conversation.lastMessageAt = new Date();
     await conversation.save();
 

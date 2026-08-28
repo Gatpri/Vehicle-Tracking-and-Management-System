@@ -374,12 +374,21 @@ const openLower = (sentence: string, lang: Lang): string => {
  * walkthrough left looping afterwards would be the exact complaint.
  */
 function usePrefersReducedMotion(): boolean {
-  const [reduce, setReduce] = useState(false);
+  // Seeded from a lazy initializer rather than set inside the effect. Beyond
+  // avoiding the cascading render, this fixes a real defect: reading the query
+  // in the effect meant the first render always said "no preference", so the
+  // Watch step's video autoplayed for a frame before being told to stop — for
+  // exactly the people who asked for no motion.
+  const [reduce, setReduce] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduce(mq.matches);
     const onChange = (e: MediaQueryListEvent) => setReduce(e.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
@@ -429,11 +438,36 @@ const CCTV_CLIP = "/video/cctv-anpr.mp4";
 export default function HowItWorksDemo({ onClose }: { onClose: () => void }) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
-  const [narrate, setNarrate] = useState(false);
+  // Narration starts ON where the browser can speak.
+  //
+  // It used to default off, which made the walkthrough open silent AND made
+  // every step flick past on a fixed 6-12s timer while the viewer was still
+  // reading. Those are the same bug: with narration on, the speech itself is
+  // the clock (see the driver effect below), so each scene lasts exactly as
+  // long as its sentence takes to say. Off, it falls back to a guessed
+  // duration that is necessarily wrong for everyone.
+  //
+  // Autoplay policy can still refuse the first utterance until the visitor
+  // interacts; the toggle then turns it on properly, and the fixed timer
+  // carries the scenes in the meantime. Nothing breaks either way.
+  const [narrate, setNarrate] = useState(() => speechSupported());
   const [lang, setLang] = useState<Lang>("en");
   // True during the hand-over between scenes, which drives the cross-fade.
   const [fading, setFading] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  /**
+   * False until loadVoices() settles.
+   *
+   * Without this the narration effect fired once on mount with an empty voice
+   * list, and again ~50ms later when the voices arrived — and because `voices`
+   * is one of its dependencies, the re-run's cleanup called cancelSpeech() on
+   * the sentence already being spoken. Chrome frequently never recovers from
+   * that speak/cancel/speak inside one tick and stays silent for the rest of
+   * the walkthrough, which is exactly the "no sound" symptom. Holding the
+   * first utterance until the list is known costs at most ~1.2s (loadVoices
+   * resolves early when voices are already present) and removes the race.
+   */
+  const [voicesReady, setVoicesReady] = useState(false);
   const reduceMotion = usePrefersReducedMotion();
   const closeRef = useRef<HTMLButtonElement>(null);
   // Guards the async narration chain: a scene change, a language change or a
@@ -447,7 +481,12 @@ export default function HowItWorksDemo({ onClose }: { onClose: () => void }) {
   const L = (p: Phrase) => t(p, lang);
 
   useEffect(() => {
-    loadVoices().then(setVoices);
+    loadVoices().then((v) => {
+      setVoices(v);
+      // Set even when the list is empty: a device with no voices at all must
+      // still narrate through the default voice rather than wait forever.
+      setVoicesReady(true);
+    });
   }, []);
 
   // Escape closes, as it does in every dialog people have used before. Focus
@@ -465,10 +504,24 @@ export default function HowItWorksDemo({ onClose }: { onClose: () => void }) {
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = previousOverflow;
-      // Leaving mid-sentence must not leave a voice talking to a closed page.
-      cancelSpeech();
     };
-  }, [onClose]);
+    // Deliberately empty: the Escape handler and scroll lock are set up once
+    // for the life of the dialog.
+    //
+    // This used to depend on [onClose] and to call cancelSpeech() in its
+    // cleanup. The parent passes onClose as an inline arrow, so it is a new
+    // identity on every render of the homepage — and the homepage re-renders
+    // every 1.6s from the job-card animation. The effect therefore tore down
+    // and re-ran on that beat, cancelling the narration mid-sentence every
+    // time. That is why the web was silent while mobile, which has no ticking
+    // parent, spoke normally.
+    //
+    // onClose is only read inside the keydown handler, and calling last
+    // render's copy is harmless: every version closes the same dialog. The
+    // "voice talking to a closed page" case the old comment worried about is
+    // covered by the narration effect's own cleanup, which runs on unmount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /**
    * One driver for both the picture and the sound, so the two can never
@@ -509,7 +562,9 @@ export default function HowItWorksDemo({ onClose }: { onClose: () => void }) {
       }, FADE_MS);
     };
 
-    if (narrate && canSpeak) {
+    // Waiting on voicesReady, not just canSpeak: speaking before the list
+    // settles is what caused the cancel-mid-sentence race described above.
+    if (narrate && canSpeak && voicesReady) {
       // Resolves when the voice stops talking — the sentence is never cut off,
       // and there is never silence waiting for a timer to catch up.
       //
@@ -533,6 +588,12 @@ export default function HowItWorksDemo({ onClose }: { onClose: () => void }) {
         // A beat after the sentence, so scenes breathe instead of snapping.
         tailMs: SPEECH_TAIL_MS,
       }).then(advance);
+    } else if (narrate && canSpeak && !voicesReady) {
+      // Narration is wanted but the voice list has not settled yet. Hold the
+      // scene rather than starting the silent reading timer: falling through
+      // to it would advance — or finish the whole walkthrough — before the
+      // first word was ever spoken. The effect re-runs the moment voicesReady
+      // flips, and speaking begins then.
     } else {
       timer = window.setTimeout(advance, scene.ms);
     }
@@ -540,10 +601,17 @@ export default function HowItWorksDemo({ onClose }: { onClose: () => void }) {
     return () => {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
+      // Stop the voice too. Pausing re-runs this effect, so without this the
+      // utterance already handed to the browser keeps talking to the end of
+      // its sentence over a visibly paused scene — and closing mid-sentence
+      // left a voice narrating a dialog that is no longer on screen. Every
+      // other exit from a scene (goTo, replay, changeLang) already cancels;
+      // this is the one path that did not.
+      cancelSpeech();
     };
     // scene.body is stable per index; listing index covers it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, playing, narrate, canSpeak, lang, voices, total]);
+  }, [index, playing, narrate, canSpeak, voicesReady, lang, voices, total]);
 
   // Switching narration on mid-scene should start speaking straight away
   // rather than waiting for the next step to come round.

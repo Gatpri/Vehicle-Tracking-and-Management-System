@@ -650,3 +650,66 @@ a.ap-item-card:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
   .ap-help-urgent { flex-direction: column; align-items: stretch; }
   .ap-help-urgent .uh-btn { width: 100%; justify-content: center; }
 }
+
+/* ==========================================================================
+   SOS page polish.
+   The page previously sat as an unstyled block on the flat app background,
+   which read as a different product from the landing page it is reached from.
+   These rules give it the same surface treatment — a defined panel, a soft
+   radial ground, deliberate edges — without changing any behaviour.
+   ========================================================================== */
+
+/* The button now sits on its own panel rather than floating on the page. */
+.ap-sos-hero {
+  text-align: center;
+  padding: 46px 24px 40px;
+  border-radius: 20px;
+  background:
+    radial-gradient(520px 260px at 50% 0%, rgba(239, 68, 68, 0.07), transparent 70%),
+    linear-gradient(180deg, #ffffff, #fbfcfe);
+  border: 1px solid var(--slate-200);
+  box-shadow: 0 12px 32px -18px rgba(15, 23, 42, 0.22);
+}
+
+/* A slow halo so the control reads as live without animating the button
+   itself, which would undermine a serious action. */
+.ap-sos-button {
+  position: relative;
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  animation: ap-sos-pulse 2.8s ease-in-out infinite;
+}
+.ap-sos-button:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 14px rgba(239, 68, 68, 0.14), 0 16px 34px -14px rgba(239, 68, 68, 0.6);
+}
+@keyframes ap-sos-pulse {
+  0%, 100% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0.12); }
+  50%      { box-shadow: 0 0 0 17px rgba(239, 68, 68, 0.06); }
+}
+
+/* The theft option is the destructive one of the two, so it carries the red
+   weighting even before selection — someone scanning in a panic should find
+   it without reading both labels. */
+.ap-sos-option {
+  box-shadow: 0 4px 14px -8px rgba(15, 23, 42, 0.2);
+}
+.ap-sos-option:hover { transform: translateY(-2px); }
+.ap-sos-option.active {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14);
+}
+
+/* The form below the choice, given the same panel treatment as the hero so the
+   two read as one flow rather than a control and an unrelated form. */
+.ap-sos-form-card {
+  margin-top: 26px;
+  padding: 24px;
+  border-radius: 18px;
+  background: #fff;
+  border: 1px solid var(--slate-200);
+  box-shadow: 0 12px 32px -20px rgba(15, 23, 42, 0.22);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ap-sos-button { animation: none; }
+  .ap-sos-option:hover, .ap-sos-button:not(:disabled):hover { transform: none; }
+}

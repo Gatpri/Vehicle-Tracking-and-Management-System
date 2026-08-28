@@ -146,14 +146,73 @@ export const speak = (
     const finish = () => {
       if (done) return;
       done = true;
+      window.clearTimeout(watchdog);
       if (tailMs > 0) window.setTimeout(resolve, tailMs);
       else resolve();
     };
     utterance.onend = finish;
     utterance.onerror = finish;
 
+    // Chrome drops `end` (and sometimes `error`) when synthesis stalls — a
+    // backgrounded tab, a voice swapped out mid-sentence, an over-long
+    // utterance. The callers use this promise as the clock that advances the
+    // walkthrough, so a dropped event does not merely lose the audio: it
+    // freezes the whole thing on one step with no way forward.
+    //
+    // The budget is derived from the text and deliberately generous, because
+    // firing early is worse than firing late: a false trigger would cut a
+    // scene short, while a late one only delays recovery from a stall nobody
+    // can fix anyway.
+    //
+    // Real speech runs ~13 characters/second at rate 1. 150ms/char is roughly
+    // double that, so even an unusually slow voice finishes first. The longest
+    // line in the walkthroughs is ~320 chars, and the spoken form (step lead +
+    // body) reaches ~480 — about 44s of audio, against a ~74s budget here.
+    // The ceiling is set above that worst case rather than below it, which an
+    // earlier 60s cap was not.
+    const budgetMs = Math.min(
+      120_000,
+      Math.max(5_000, (spokenText.length * 150) / Math.max(utterance.rate, 0.1)) + 3_000
+    );
+    const watchdog = window.setTimeout(() => {
+      // Leaving a stalled utterance queued would block everything spoken
+      // after it, so clear the queue before handing control back.
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        // Nothing useful to do — resolving anyway is the point.
+      }
+      finish();
+    }, budgetMs);
+
     window.speechSynthesis.speak(utterance);
   });
+
+/**
+ * Unlocks speech synthesis from inside a user gesture.
+ *
+ * Chrome (and Safari) treat speech like audio: the first speak() must be able
+ * to trace back to a real interaction, or it is silently dropped — no error,
+ * no event, just silence for the rest of the page's life. A walkthrough that
+ * begins narrating a moment AFTER the click that opened it can miss that
+ * window, especially now that the first utterance waits for the voice list.
+ *
+ * Speaking a single space inside the click itself satisfies the policy and is
+ * inaudible. Safe to call repeatedly; after the first success it is a no-op in
+ * effect.
+ */
+export const primeSpeech = (): void => {
+  if (!speechSupported()) return;
+  try {
+    // Clear anything stuck from a previous page interaction first.
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+  } catch {
+    // An unusable synthesiser is not worth breaking the click over.
+  }
+};
 
 /** True when a Nepali (or Devanagari-capable) voice exists on this device. */
 export const hasNepaliVoice = (voices: SpeechSynthesisVoice[]): boolean =>

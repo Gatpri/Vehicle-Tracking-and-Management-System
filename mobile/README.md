@@ -29,11 +29,22 @@ Then, from the same dev server:
 
 On a physical device over the LAN, pin the host so Metro does not advertise a
 virtual adapter (this machine has VirtualBox and WSL interfaces alongside the
-real wifi one):
+real wifi one).
+
+**Do not hardcode the address here.** DHCP reassigns it, and a stale value is
+exactly what produces `Could not connect to the server — exp://<old-ip>:8081`
+on the phone. Read the current wifi address first, then start Metro with it:
 
 ```bash
-REACT_NATIVE_PACKAGER_HOSTNAME=192.168.254.13 npx expo start
+# Windows (Git Bash): IPv4 of the real wifi adapter
+ipconfig | grep -A4 "adapter WiFi" | grep "IPv4"
+
+REACT_NATIVE_PACKAGER_HOSTNAME=<that-address> npx expo start --clear
 ```
+
+The same address must also be `EXPO_PUBLIC_API_URL` in `.env`
+(`http://<that-address>:3000`), so the app's API calls reach the same machine
+Metro is served from. Both change together whenever the LAN address does.
 
 ### The web target vs. `vite-project`
 

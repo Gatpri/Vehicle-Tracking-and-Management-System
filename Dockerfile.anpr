@@ -1,57 +1,106 @@
-# ANPR Service Dockerfile
-# This service handles YOLO plate detection and LLM-based sentiment analysis
+# ANPR Service — YOLO plate detection + LLM sentiment analysis
+#
+# Multi-stage: wheels are installed into a venv in the builder (which needs
+# compilers), then only the finished venv is copied into a clean runtime that
+# never carries build-essential/gcc/git.
+FROM python:3.11-slim AS builder
 
-FROM python:3.11-slim
+# Build-only toolchain. None of this survives into the final image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential gcc g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# A venv keeps the app's packages in one directory that is trivial to COPY
+# across stages, without dragging along pip's own cache and metadata.
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
+COPY vite-project/anpr_service/requirements.txt ./
 
-# Install system dependencies ALL AT ONCE
-# Including all OpenCV and X11 libs needed
+# torch FIRST, from the CPU-only index. The default PyPI torch wheel depends on
+# ~3.4GB of nvidia-* CUDA runtime packages plus triton. docker-compose requests
+# no GPU devices, so torch.cuda.is_available() is always False here (server.py
+# falls back to CPU on its own) and every byte of that CUDA stack is dead weight.
+# Installing it first pins the CPU build so ultralytics can't pull the CUDA one
+# back in as a transitive dependency.
+RUN pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cpu \
+    torch torchvision
+
+# ultralytics hard-depends on opencv-python (the GUI build). Installing it
+# normally drags that in *even if* headless is already present, leaving BOTH
+# variants and ~200MB of duplicate native libs in the image. So ultralytics goes
+# in with --no-deps and its dependency list is supplied here explicitly, with
+# opencv-python-headless substituted for opencv-python. The service never calls
+# imshow/waitKey, so headless is a drop-in (identical cv2 API, no X11 backend).
+#
+# If ultralytics is upgraded, re-check `pip show ultralytics | grep Requires`
+# against this list — a new dependency added upstream will NOT be installed
+# automatically while --no-deps is in effect.
+RUN pip install --no-cache-dir \
+        opencv-python-headless \
+        filelock matplotlib numpy nvidia-ml-py pillow polars psutil pyyaml \
+        requests ultralytics-platform ultralytics-thop \
+    && pip install --no-cache-dir --no-deps ultralytics
+
+# Everything else from requirements.txt. torch, torchvision, opencv-python and
+# ultralytics are filtered out because they were pinned above.
+#
+# NOTE: use [[:space:]], not \s — grep -E is POSIX ERE and does not support the
+# \s shorthand, so a \s pattern silently matches nothing. `cat` keeps the
+# filtered list visible in build logs so this can't regress unnoticed.
+RUN grep -viE '^(torch|torchvision|opencv-python|ultralytics)[[:space:]]*$' requirements.txt > /tmp/rest.txt \
+    && cat /tmp/rest.txt \
+    && pip install --no-cache-dir -r /tmp/rest.txt
+
+# Fail loudly if the GUI opencv ever sneaks back in as a transitive dep; a
+# silent reappearance would quietly re-add ~200MB.
+RUN if pip show opencv-python > /dev/null 2>&1; then \
+        echo "ERROR: opencv-python (GUI build) was installed; expected headless only" >&2; \
+        exit 1; \
+    fi
+
+# Strip test suites and bundled headers that ship inside the wheels; nothing
+# imports them at runtime.
+RUN find /opt/venv -type d -name "tests" -prune -exec rm -rf {} + 2>/dev/null || true; \
+    find /opt/venv -type d -name "__pycache__" -prune -exec rm -rf {} + 2>/dev/null || true; \
+    find /opt/venv -type d -name "include" -path "*/torch/*" -prune -exec rm -rf {} + 2>/dev/null || true; \
+    find /opt/venv -name "*.pyc" -delete 2>/dev/null || true
+
+
+# ---------- Runtime ----------
+FROM python:3.11-slim
+
+# Runtime-only shared libs. libgl1 + libglib2.0-0 are what headless OpenCV still
+# links against; curl is used by the healthcheck below.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    g++ \
-    libgomp1 \
-    wget \
-    curl \
-    # OpenCV/OpenGL dependencies
-    libsm6 \
-    libxext6 \
-    libxcb1 \
-    libx11-6 \
-    libglib2.0-0 \
-    libxrender-dev \
-    libxext-dev \
-    libgl1 \
-    # Additional libraries
-    ca-certificates \
-    git \
+    libgomp1 libgl1 libglib2.0-0 curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Copy requirements
-COPY vite-project/anpr_service/requirements.txt ./
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Install Python dependencies
-# Note: This installs CPU-only torch. For GPU, use torch with CUDA support
-RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt || true
+WORKDIR /app
 
-# Copy ANPR service code
+# Source last: it changes far more often than the dependency layers above, so
+# keeping it here means a code edit rebuilds only this thin layer.
 COPY vite-project/anpr_service ./
 
-# Create directory for downloaded models
 RUN mkdir -p /app/models
+# YOLO_CONFIG_DIR: ultralytics writes settings.json on first import and falls
+# back to /tmp with a warning when its default (~/.config/Ultralytics) is not
+# writable. Pointing it at the models volume keeps that state on a real mount.
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV TORCH_HOME=/app/models
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    TORCH_HOME=/app/models \
+    YOLO_CONFIG_DIR=/app/models
 
-# Expose port
 EXPOSE 8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:8000/health || exit 1
+  CMD curl -f http://127.0.0.1:8000/health || exit 1
 
-# Start ANPR service
 CMD ["python", "server.py"]

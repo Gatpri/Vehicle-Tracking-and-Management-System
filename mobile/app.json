@@ -13,7 +13,8 @@
       "bundleIdentifier": "com.vehiclesafety.mobile",
       "infoPlist": {
         "NSAppTransportSecurity": {
-          "NSAllowsLocalNetworking": true
+          "NSAllowsLocalNetworking": true,
+          "NSAllowsArbitraryLoads": true
         },
         "NSLocalNetworkUsageDescription": "The app connects to the development server on your local network.",
         "NSLocationWhenInUseUsageDescription": "Your location is used to send an accurate position with SOS alerts and to find nearby workshops.",

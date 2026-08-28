@@ -49,7 +49,7 @@ services:
     networks:
       - anpr-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -142,7 +142,7 @@ services:
       anpr_service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -162,7 +162,49 @@ services:
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Mobile (Expo / React Native) — static web export
+  # Native Android/iOS builds can't run in a container, so what's containerised
+  # is the react-native-web export: `expo export` compiles app/ to static assets
+  # that nginx serves. Served on 8082: port 80 is the web frontend, and 8081 is
+  # Metro's default (the bare-metal `expo start` dev server), which would clash
+  # whenever someone runs the app natively at the same time.
+  mobile:
+    build:
+      context: .
+      dockerfile: Dockerfile.mobile
+      args:
+        # Baked in at BUILD time (Expo inlines EXPO_PUBLIC_* like Vite does), so
+        # these can't be changed by editing `environment:` later — changing any
+        # of them needs `docker compose build mobile`. API_URL must be reachable
+        # by the BROWSER, hence localhost and not the internal service name.
+        # The Firebase/Google values come from the root .env, same keys the
+        # bare-metal Expo app reads.
+        EXPO_PUBLIC_API_URL: ${DOCKER_BACKEND_BASE_URL:-http://localhost}
+        EXPO_PUBLIC_FIREBASE_API_KEY: ${EXPO_PUBLIC_FIREBASE_API_KEY:-}
+        EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: ${EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN:-}
+        EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${EXPO_PUBLIC_FIREBASE_PROJECT_ID:-}
+        EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET:-}
+        EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:-}
+        EXPO_PUBLIC_FIREBASE_APP_ID: ${EXPO_PUBLIC_FIREBASE_APP_ID:-}
+        EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: ${EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID:-}
+        EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: ${EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID:-}
+        EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID:-}
+    container_name: anpr_mobile
+    restart: unless-stopped
+    ports:
+      - "8082:80"
+    networks:
+      - anpr-network
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
       interval: 30s
       timeout: 10s
       retries: 3

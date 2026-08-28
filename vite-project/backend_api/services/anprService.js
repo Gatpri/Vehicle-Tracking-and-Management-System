@@ -15,9 +15,17 @@ const ANPR_SERVICE_URL = process.env.ANPR_SERVICE_URL || "http://127.0.0.1:8000"
 //   box        - null unless detected. x/y are the box CENTRE, width/height the
 //                box size, all in the source image's pixel coordinates.
 //   confidences- 0-100 percentages, both for the box and the character read.
-export const analyzeFrame = async (buffer, { tiles = false } = {}) => {
+//
+// Pass `cameraId` for anything that streams frames from a fixed camera. The
+// sidecar then tracks each plate across frames and votes on its text rather
+// than trusting whichever single frame arrived: the character reader misses
+// roughly one character in five on hard images, but it misses a *different*
+// one each frame, so the majority across a few sightings is right far more
+// often than any one of them. Without the id every frame is read in isolation,
+// which is correct for a one-off upload and wasteful for a camera.
+export const analyzeFrame = async (buffer, { tiles = false, cameraId } = {}) => {
   const { data } = await axios.post(`${ANPR_SERVICE_URL}/detect`, buffer, {
-    params: { tiles },
+    params: cameraId ? { tiles, cameraId } : { tiles },
     headers: { "Content-Type": "application/octet-stream" },
     timeout: 30000,
     maxBodyLength: Infinity,
@@ -34,6 +42,10 @@ export const analyzeFrame = async (buffer, { tiles = false } = {}) => {
     // Every plate found in the frame, best-reading first. `box`/`text` above are
     // plates[0] — kept flat because callers act on one plate per frame.
     plates: data.plates ?? [],
+    // Present only when a cameraId was given. `stable` means the plate has been
+    // read consistently across several frames — the bar an alert should clear
+    // before it accuses someone of driving a stolen vehicle.
+    track: data.plates?.[0]?.track ?? null,
   };
 };
 

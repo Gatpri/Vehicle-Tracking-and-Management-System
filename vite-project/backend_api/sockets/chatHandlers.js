@@ -40,13 +40,22 @@ export const registerChatHandlers = (socket) => {
 
   socket.on("message:send", async ({ conversationId, text }, ack) => {
     try {
+      // Validated and trimmed here, exactly as the REST twin (sendMessage)
+      // and message:edit below already do. This is the path the UI actually
+      // uses, and it was the only one of the three that accepted anything:
+      // Message.text is deliberately not `required` (unsend blanks it), so a
+      // whitespace-only send was persisted as a real message and rendered as
+      // an empty bubble nobody could explain.
+      const body = String(text ?? "").trim();
+      if (!body) return ack?.({ success: false, message: "A message cannot be empty" });
+
       const convo = await Conversation.findById(conversationId);
       if (!convo) return ack?.({ success: false, message: "Conversation not found" });
 
       const allowed = await canAccessConversation(socket.user, convo);
       if (!allowed) return ack?.({ success: false, message: "Forbidden" });
 
-      const message = await Message.create({ conversation: conversationId, sender: socket.user._id, text });
+      const message = await Message.create({ conversation: conversationId, sender: socket.user._id, text: body });
       convo.lastMessageAt = new Date();
       await convo.save();
 

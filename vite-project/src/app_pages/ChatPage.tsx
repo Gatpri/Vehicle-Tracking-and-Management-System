@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
-import { getSocket } from "../lib/socket";
+import { getSocket, subscribeWithReconnect } from "../lib/socket";
 import { useAuth } from "../lib/AuthContext";
 import { MessageBubble, type ChatMessage as Message } from "../components/MessageBubble";
 
@@ -113,6 +113,22 @@ function ChatPage() {
     };
   }, [activeId]);
 
+  // Join the open thread's room, and re-join it after any reconnect.
+  //
+  // A bare `emit("chat:join", id)` only holds until the first disconnect: a
+  // reconnect is a brand-new socket with no room memberships, so the thread
+  // would sit there silently receiving nothing. Channel threads happen to
+  // survive that anyway (the server also broadcasts to the audience's
+  // per-user rooms), which is exactly what made this easy to miss — direct
+  // threads have no such fallback. Every other live feature in the app already
+  // subscribes through this helper; chat was the one that did not.
+  useEffect(() => {
+    if (!activeId) return;
+    return subscribeWithReconnect("chat:join", activeId, (message) =>
+      toast.error(message || "Lost access to that conversation")
+    );
+  }, [activeId]);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
@@ -132,7 +148,8 @@ function ChatPage() {
           res.data.conversationLabel ??
           "Conversation"
       );
-      getSocket().emit("chat:join", id);
+      // The room is joined by the effect keyed on activeId, not here — see
+      // the note there. setActiveId above is what triggers it.
     } catch {
       toast.error("Failed to load messages");
     }
