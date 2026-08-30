@@ -1,0 +1,22 @@
+# Normalize line endings so a file edited on Windows does not show up as a
+# whole-file rewrite in the next diff. Without this, README.md was stored with
+# CRLF while AGENTS.md used LF, and a one-line change reported 389 lines
+# changed — which hides the real edit and makes review pointless.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF; cmd.exe mis-parses LF-only .bat files.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets: never touch these, and never try to diff them as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.mp4 binary
+*.webm binary
+*.pt binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

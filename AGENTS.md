@@ -36,6 +36,7 @@ Changing any of these will break something that currently works.
 | CORS `origin` is a **function**, not an array | A static list cannot cover localhost plus a changing LAN IP across ports 80/3000/5173/8081. Fixing one client used to evict the other |
 | CORS keys off `ALLOW_LAN_CORS`, not `NODE_ENV` | `Dockerfile.backend` sets `NODE_ENV=production` even in local dev, so keying off it would disable LAN access in exactly the setup that needs it |
 | `allowedHeaders` lists `x-client` and `Authorization` | The mobile client sends both. An unlisted header makes the browser block the request, surfacing as "cannot reach the server" rather than a CORS error |
+| `/verify-email` falls back to an email lookup when the token is gone | Mail clients prefetch links, so the pending row is routinely consumed before the user taps. Without the fallback a verified user is told their link is invalid |
 | `Message.text` is not `required` | Unsend blanks it. Validation lives in the handlers instead |
 | `getIO().to(rooms).emit(...)` is one call, not a loop | A socket is often in two matching rooms; a per-room loop delivers the message twice |
 | `docker-compose.dev.yml` polls with `find -newer` instead of `node --watch` | Docker Desktop does not propagate inotify events from a Windows host into a Linux container, so `--watch` never fires. `CHOKIDAR_USEPOLLING` does not help — that is read by chokidar, not node's own watcher |
@@ -117,6 +118,18 @@ This project keeps **exactly two** markdown files:
 Do not add `NOTES.md`, `CHANGELOG.md`, `FIXES.md`, or per-directory READMEs.
 New information belongs in the right section of one of these two. Summaries of
 work performed belong in the pull request or the commit message, not in a file.
+
+---
+
+## Line endings
+
+`.gitattributes` normalizes everything to LF (`.bat` / `.ps1` keep CRLF, since
+cmd.exe mis-parses LF-only batch files). This is not cosmetic: `README.md` was
+once stored with CRLF while `AGENTS.md` used LF, so a one-line edit reported 389
+lines changed and buried the real change.
+
+If a diff shows every line of a file rewritten, check the line endings before
+reading anything into it.
 
 ---
 

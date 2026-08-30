@@ -82,7 +82,7 @@ if (!errors.isEmpty()) {
     // self-contained page (phone signup, where the Vite dev server is not
     // something the device can be relied on to reach).
     const client = req.get("x-client") === "mobile" ? "mobile" : "web";
-    const link = `${BACKEND_BASE_URL}/api/verify-email?token=${token}&client=${client}`;
+    const link = `${BACKEND_BASE_URL}/api/verify-email?token=${token}&client=${client}&email=${encodeURIComponent(email)}`;
     await mailer.send({
       to: email,
       from: "saugatkapri@gmail.com",       
@@ -221,8 +221,17 @@ router.get("/verify-email", async (req, res) => {
 
     if (!record) {
       // A second tap of the same link lands here, because the pending row was
-      // deleted by the first one. Treat an already-created account as success
-      // rather than telling a verified user their link is invalid.
+      // deleted by the first one — and mail clients prefetch links, so this is
+      // routine rather than rare. Look the account up by the email carried on
+      // the link: if it exists the verification already succeeded, and saying
+      // "invalid" would tell a user with a perfectly good account that
+      // something went wrong. Only a token matching no account at all is
+      // genuinely invalid.
+      const { email } = req.query;
+      if (email) {
+        const existing = await User.findOne({ email }).select("_id");
+        if (existing) return finishVerification(res, client, "success");
+      }
       return finishVerification(res, client, "invalid");
     }
 

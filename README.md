@@ -21,6 +21,7 @@ one backend**.
 - [ANPR service](#anpr-service)
 - [Sentiment analysis](#sentiment-analysis)
 - [Roles and permissions](#roles-and-permissions)
+- [Status](#status)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -360,16 +361,51 @@ both clients. The backend is authoritative; client checks only shape the UI.
 
 ---
 
+## Status
+
+**No known open issues.** Every item in the table below has been fixed and
+verified end to end against the running stack.
+
+| Check | State |
+|---|---|
+| Web typecheck (`tsc --noEmit`) | passing |
+| Mobile typecheck (`tsc --noEmit`) | passing |
+| Web production build (`vite build`) | passing |
+| Backend — every `.js` file parses | passing |
+| All five containers | healthy |
+| Endpoints `:3000` `:80` `:5173` `:8081` | responding |
+| CORS: LAN origins allowed, public blocked | verified |
+| LAN URL drift (`npm run lan:check`) | none |
+
+Re-run these at any time:
+
+```bash
+cd vite-project && npx tsc --noEmit -p tsconfig.app.json && npx vite build
+cd mobile && npx tsc --noEmit
+npm run lan:check
+docker compose ps
+```
+
+---
+
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
+These were real failures in this project. All are **fixed** — the table records
+what caused each one, because the symptoms are misleading and the same mistakes
+are easy to reintroduce.
+
+| Symptom | Cause | Resolution |
 |---|---|---|
-| **Web chat sends nothing, mobile works** | Vite proxies `/api` but the socket connects to the page origin | Ensure `vite.config.ts` proxies `/socket.io` with `ws: true` |
-| **"Cannot reach the server" on a phone** | Metro was started before `.env` changed, so no API URL was inlined | Restart with `npm run start:lan -- --clear` |
-| **Verification email link is dead** | `DOCKER_BACKEND_BASE_URL` is stale or points at `localhost` | `npm run lan` then `docker compose up -d backend` |
-| **Login works on one client, breaks on the other** | A stale hardcoded origin | Covered by the LAN-origin CORS rule; verify with `npm run lan:check` |
-| **A code change has no effect** | The container runs a copy baked into the image | Use the dev overlay, or `docker compose up -d --build backend` |
+| **Web chat sends nothing, mobile works** | Vite proxied `/api` but not `/socket.io`, so the dev server answered the handshake with the SPA's `index.html`. The socket never connected and `emit` failed **silently** | Fixed — `vite.config.ts` now proxies `/socket.io` with `ws: true`. Keep both entries |
+| **"Cannot reach the server" on a phone** | Metro was started before `.env` changed, so no API URL was inlined into the bundle. The app fell back to `localhost`, which on a phone is the phone itself | Fixed — `mobile/.env` no longer pins the URL; the host is derived from Metro. Start with `npm run start:lan -- --clear` |
+| **Verification email link is dead** | `DOCKER_BACKEND_BASE_URL` pointed at a stale IP with no port. Mobile mail clients also render `localhost` links as dead plain text | Fixed — `npm run lan` keeps it current; the email now carries a tappable button *and* the raw URL |
+| **"Invalid Link" after clicking a verification email** | The link was opened twice — mail clients prefetch — and the first click consumed the pending row | Fixed — a repeat click confirms success when the account already exists |
+| **Login works on one client, breaks on the other** | CORS used a static origin list, which could not cover localhost plus a changing LAN IP across four ports. Fixing one client evicted the other | Fixed — the origin check is now a function accepting any private-LAN origin in dev. Set `ALLOW_LAN_CORS=false` in production |
+| **A code change has no effect** | The container runs the copy baked into the image, so edits do nothing until a rebuild. Everything looks healthy meanwhile | Use the dev overlay (live reload), or `docker compose up -d --build backend` |
 | **Docker CLI: "cannot find the file specified"** | Docker Desktop's backend died with its window still open | Quit fully, `wsl --shutdown`, start again |
+
+> Most of these share one root cause: **a hardcoded or stale LAN address**. When
+> something is unreachable, run `npm run lan:check` before investigating further.
 
 ---
 
@@ -384,5 +420,6 @@ mobile/                  React Native (Expo) client
 docker-compose.yml       production stack
 docker-compose.dev.yml   dev overlay: backend live reload
 sync-lan-ip.mjs          keeps LAN URLs current (npm run lan)
+.gitattributes           normalizes line endings to LF
 AGENTS.md                conventions for AI coding agents
 ```
