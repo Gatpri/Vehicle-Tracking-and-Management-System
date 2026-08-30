@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { primeSpeech } from "../../lib/speak";
 import { Link, useNavigate } from "react-router-dom";
 import "../Styles/home.css";
@@ -168,7 +168,7 @@ const features = [
   { icon: <IconScan />, title: "AI Plate Recognition", desc: "Advanced number-plate recognition flags lost or stolen vehicles the moment they're seen.", to: "/safety" },
   { icon: <IconStore />, title: "Smart Workshop Matching", desc: "Get personalized workshop recommendations based on distance, ratings, and pricing history.", to: "/workshops" },
   { icon: <IconChat />, title: "Direct Chat Support", desc: "Message your workshop or an admin directly and keep every conversation in one place.", to: "/chat" },
-  { icon: <IconWallet />, title: "Digital Wallet", desc: "Pay for services securely from an in-app wallet — no cash, no card details shared.", to: "/wallet" },
+  { icon: <IconWallet />, title: "Wallet", desc: "Pay for services securely from an in-app wallet — no cash, no card details shared.", to: "/wallet" },
   { icon: <IconSiren />, title: "Emergency SOS", desc: "One tap alerts nearby help and shares your live location during a breakdown or emergency.", to: "/sos" },
 ];
 
@@ -182,6 +182,30 @@ function Home() {
   // The footer link covers both halves of the product, so it opens a
   // chooser first rather than assuming which one was meant.
   const [showChooser, setShowChooser] = useState(false);
+
+  // Background clip behind the features grid. Dropped from the DOM entirely if
+  // it fails to load, so a missing file degrades to the plain white section
+  // rather than a black band behind the cards.
+  const featureVideoRef = useRef<HTMLVideoElement>(null);
+  const [featureVideoOk, setFeatureVideoOk] = useState(true);
+
+  // Decorative motion, so a reduced-motion preference pauses it. CSS cannot do
+  // this — animation-play-state does not apply to video playback — and the
+  // preference can change while the page is open, hence the listener.
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const apply = () => {
+      const el = featureVideoRef.current;
+      if (!el) return;
+      if (mq.matches) el.pause();
+      // A play() rejection is normal here (autoplay policies, a tab in the
+      // background) and is not worth surfacing.
+      else void el.play().catch(() => {});
+    };
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [featureVideoOk]);
 
   // Everything shown in the hero and stat band is this user's own data.
   const home = useHomeData();
@@ -227,11 +251,10 @@ function Home() {
 
           <nav className={`uh-links ${menuOpen ? "open" : ""}`}>
             <Link to="/vehicles" onClick={() => setMenuOpen(false)}>Register Vehicles</Link>
-            <Link to="/bookings" onClick={() => setMenuOpen(false)}>Bookings</Link>
             <Link to="/workshops" onClick={() => setMenuOpen(false)}>Workshops</Link>
-            <Link to="/wallet" onClick={() => setMenuOpen(false)}>Wallet</Link>
-            <Link to="/chat" onClick={() => setMenuOpen(false)}>Chat</Link>
+            <Link to="/bookings" onClick={() => setMenuOpen(false)}>Bookings</Link>
             <Link to="/safety" onClick={() => setMenuOpen(false)}>Safety</Link>
+            <Link to="/chat" onClick={() => setMenuOpen(false)}>Chat</Link>
             <Link to="/sos" onClick={() => setMenuOpen(false)} style={{ color: "var(--orange-500)", fontWeight: 700 }}>SOS</Link>
 
             <div className="uh-links-mobile-user">
@@ -333,8 +356,32 @@ function Home() {
         </div>
       </section>
 
-      {/* Features */}
-      <section className="uh-section" id="services">
+      {/* Features.
+          The video is decorative background only: muted/loop/playsInline with
+          no controls, and aria-hidden so a screen reader skips straight to the
+          cards. A scrim div sits between it and the content — see
+          .uh-feat-scrim — because the clip is bright and moving, and unreadable
+          text over a pretty background is a worse page than no background. */}
+      <section className="uh-section uh-section-video" id="services">
+        {featureVideoOk && (
+        <div className="uh-feat-media" aria-hidden="true">
+          <video
+            ref={featureVideoRef}
+            className="uh-feat-video"
+            src="/video/features-bg.mp4"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            // If the file is missing or the codec is unsupported, drop the
+            // whole media layer rather than leave a black rectangle behind the
+            // cards. The section then renders exactly as it did before.
+            onError={() => setFeatureVideoOk(false)}
+          />
+          <div className="uh-feat-scrim" />
+        </div>
+        )}
         <div className="uh-section-head">
           <span className="uh-kicker">Platform</span>
           <h2>Everything your vehicle needs, in one place</h2>

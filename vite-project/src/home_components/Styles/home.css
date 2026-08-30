@@ -667,6 +667,132 @@
 /* Feature grid sits on plain white so the cards carry the contrast. */
 .uh-section { background: var(--bg); }
 
+/* ---------------------------------------------------------------------------
+   Features section over a background video — dark treatment.
+
+   The section is max-width:1200px and centred, so the video cannot just be a
+   background on it: that would leave the page margins pale and the band would
+   stop short of the viewport edges. The media layer is pulled out to the full
+   viewport width with the 50vw/-50vw trick while the content stays inside the
+   original column, so the footage covers the whole section edge to edge.
+
+   This band is dark, matching .uh-ai and the stat band rather than inventing a
+   third palette. Legibility over moving footage is the constraint that drives
+   everything here:
+     1. a dark scrim over the video, kept on its own layer so its opacity can
+        be tuned without touching playback,
+     2. cards that are dark and only lightly translucent — the descriptions run
+        to three lines, and fully glassy cards would let motion through behind
+        the text, which is the fastest way to make this section unreadable,
+     3. text repainted for a dark ground, reusing the same values .uh-ai uses
+        (#fff headings, #cbd5e1/#94a3b8 body) so the page stays consistent.
+   --------------------------------------------------------------------------- */
+/* Full-bleed, following the same shape as .uh-section-alt above: the SECTION
+   spans the viewport and only its children are constrained to the 1200px
+   column. The alternative — leaving the section at max-width:1200px and
+   pulling the video out with left:50%/width:100vw — does not work on this
+   page: .uh (line ~25) sets overflow-x:hidden, which makes it a containing
+   block and clips the breakout, leaving a pale gutter down one side. */
+.uh-section-video {
+  position: relative;
+  isolation: isolate; /* keeps the z-indexes below scoped to this section */
+  overflow: hidden;
+  background: var(--navy-950); /* shows through before the video paints */
+  max-width: none;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+/* Re-apply the column the section itself just gave up. */
+.uh-section-video > .uh-section-head,
+.uh-section-video > .uh-grid {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+/* .uh-section-head carries its own bottom margin, which the rule above would
+   otherwise flatten. */
+.uh-section-video > .uh-section-head { margin-bottom: 52px; }
+
+.uh-feat-media {
+  position: absolute;
+  /* The section is now full width, so plain inset:0 covers all of it. */
+  inset: 0;
+  z-index: -1; /* behind the content, above the section background */
+  pointer-events: none; /* the cards stay clickable */
+}
+
+.uh-feat-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* fill the band whatever the clip's aspect ratio */
+  display: block;
+}
+
+/* The scrim. Deliberately heavy: this footage is bright and busy, and the
+   cards sit directly on top of it. The vertical gradient is strongest at the
+   edges, where the heading and the last card row sit, and eases through the
+   middle so the video still reads as motion rather than a flat black panel. */
+.uh-feat-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(10, 17, 32, 0.92) 0%,
+      rgba(10, 17, 32, 0.82) 25%,
+      rgba(10, 17, 32, 0.80) 75%,
+      rgba(10, 17, 32, 0.92) 100%
+    );
+}
+
+/* Heading block, repainted for the dark ground. */
+.uh-section-video .uh-section-head h2 { color: #fff; }
+.uh-section-video .uh-section-head p { color: #cbd5e1; }
+.uh-section-video .uh-kicker {
+  color: #93c5fd;
+  background: rgba(147, 197, 253, 0.14);
+}
+
+/* Cards: dark, bordered, and only lightly transparent so a hint of the footage
+   shows without ever sitting behind the description text. */
+.uh-section-video .uh-card {
+  background: rgba(15, 30, 58, 0.78);
+  border-color: rgba(148, 163, 184, 0.22);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.7);
+}
+.uh-section-video .uh-card h3 { color: #fff; }
+.uh-section-video .uh-card p { color: #94a3b8; }
+
+.uh-section-video .uh-card:hover {
+  background: rgba(22, 41, 79, 0.88);
+  border-color: rgba(96, 165, 250, 0.5);
+  box-shadow: 0 26px 50px -18px rgba(0, 0, 0, 0.8);
+}
+
+/* The icon tile's light-mode gradient disappears on navy, so it is brightened
+   and the glyph switched to a lighter blue that holds up on a dark tile. */
+.uh-section-video .uh-card-icon {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.28), rgba(249, 115, 22, 0.24));
+  color: #93c5fd;
+}
+
+/* Reduced motion is handled in home.tsx by pausing the element, not here:
+   animation-play-state does not apply to video playback. The scrim also goes
+   flatter so the frozen frame reads as texture rather than a still photo
+   competing with the cards. */
+@media (prefers-reduced-motion: reduce) {
+  .uh-feat-scrim { background: rgba(10, 17, 32, 0.90); }
+}
+
+/* The narrow-screen rule further up sets .uh-section padding to 60px 20px, but
+   this block sits later in the file and re-declares the horizontal padding, so
+   it would otherwise pin 24px at every width. Restated here to hand the phone
+   layout its 20px back. */
+@media (max-width: 768px) {
+  .uh-section-video { padding-left: 20px; padding-right: 20px; }
+}
+
 /* Process band: the light counterpart between two dark sections. */
 .uh-section-alt {
   background:

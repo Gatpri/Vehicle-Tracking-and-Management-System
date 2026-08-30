@@ -120,6 +120,8 @@ services:
       # a LAN IP, tunnel URL, or real domain for access from other devices.
       BACKEND_BASE_URL: ${DOCKER_BACKEND_BASE_URL:-http://localhost}
       FRONTEND_URL: ${DOCKER_FRONTEND_URL:-http://localhost}
+      # Lets the Expo client reach the API over the LAN — see .env.
+      EXPO_WEB_URL: ${EXPO_WEB_URL:-}
       
       # Roboflow
       ROBOFLOW_API_KEY: ${ROBOFLOW_API_KEY:-tPB5qhSpP6lDjg6FCOph}

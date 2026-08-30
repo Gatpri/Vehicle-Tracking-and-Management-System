@@ -27,6 +27,23 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+      },
+      // Socket.IO, which chat and every live update ride on.
+      //
+      // Without this the dev server answers /socket.io with the SPA's own
+      // index.html — a 200 carrying HTML instead of a handshake — so the
+      // client never connects and `emit` silently goes nowhere. Sending a chat
+      // message from the browser then does nothing at all, with no error,
+      // while the native app (which talks to :3000 directly and never passes
+      // through Vite) works fine. Only the production nginx config proxied
+      // this path, so the gap showed up in `npm run dev` alone.
+      //
+      // ws:true is required: the transport upgrades from polling to a
+      // WebSocket, and a proxy that only forwards HTTP drops it at the upgrade.
+      '/socket.io': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        ws: true,
       }
     }
   }

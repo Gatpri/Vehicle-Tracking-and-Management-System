@@ -69,40 +69,74 @@ const app = express();
 // purposes like login.js's per-IP lockout).
 app.set("trust proxy", true);
 
-// FRONTEND_URL is included here too so CORS automatically follows whatever
-// it's set to (a Cloudflare tunnel URL for cross-device access, or
-// localhost for same-machine dev) without a second place to edit.
-// `credentials: true` is what lets the browser send the session cookie on
-// cross-origin calls, and it is only honoured against an explicit origin
-// allowlist — never a wildcard. Authorization is gone from allowedHeaders:
-// nothing sends it any more now that the session travels in a cookie.
-// "http://localhost" (and 127.0.0.1) are port 80 — the nginx frontend in
-// docker-compose, which is what you get browsing to plain http://localhost.
-// They're listed explicitly because FRONTEND_URL points at the LAN IP, and a
-// credentialed request whose Origin isn't matched here gets no
-// Access-Control-Allow-Origin back, so the browser blocks the login outright.
+// CORS origins.
+//
+// The hard problem this solves: the SAME backend is called by the web app and
+// by the Expo app, and the web app alone is reachable at several different
+// origins — http://localhost (nginx on :80), http://localhost:5173 (Vite dev),
+// and both of those again on this machine's LAN IP so a phone or a second
+// computer can reach them. A single FRONTEND_URL cannot describe all of that,
+// and DHCP changes the LAN IP without warning.
+//
+// A static list therefore goes stale in a way that is painful to diagnose:
+// fixing the origin for mobile would drop the one the web app was using and
+// vice versa, so logging in appeared to break on one client every time the
+// other was fixed. The failure is silent — a credentialed request whose Origin
+// is not matched simply gets no Access-Control-Allow-Origin header back, and
+// the browser reports a generic network error rather than a CORS problem.
+//
+// So development accepts any origin on loopback or a private LAN range,
+// whatever port it is on, and production keeps a strict explicit allowlist.
+// `credentials: true` is only ever honoured against a specific origin (never a
+// wildcard), which is why this is a function returning the caller's origin
+// rather than "*".
+const STATIC_ORIGINS = [
+  process.env.EXPO_WEB_URL,
+  process.env.FRONTEND_URL,
+  process.env.BACKEND_BASE_URL,
+].filter(Boolean);
+
+// RFC1918 private ranges plus loopback. A public address never matches, so
+// this cannot be used to reach the API from the open internet.
+const PRIVATE_HOST = /^(localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)$/;
+
+// NODE_ENV is "production" inside the container even during local development
+// (Dockerfile.backend sets it), so it cannot be the switch here — using it
+// would disable LAN access in exactly the setup that needs it. ALLOW_LAN_CORS
+// is opt-out instead: set it to "false" for a real deployment.
+const allowLanOrigins = process.env.ALLOW_LAN_CORS !== "false";
+
+const isPrivateOrigin = (origin) => {
+  try {
+    const { hostname, protocol } = new URL(origin);
+    return protocol === "http:" && PRIVATE_HOST.test(hostname);
+  } catch {
+    return false; // unparseable Origin header
+  }
+};
+
 const corsOptions = {
-  origin: [
-    "http://localhost",
-    "http://127.0.0.1",
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:3000",
-    // The Expo web build, which Metro serves on 8081. That is the same
-    // codebase as the iOS/Android apps, run in a browser; it calls this API
-    // cross-origin because Metro does not proxy /api the way nginx does for
-    // vite-project.
-    "http://localhost:8081",
-    "http://127.0.0.1:8081",
-    // A phone or a second machine opening the Expo web build over the LAN
-    // sends its own host as the Origin, which cannot be known at build time.
-    // Set EXPO_WEB_URL (e.g. http://192.168.254.28:8081) when that is needed.
-    process.env.EXPO_WEB_URL,
-    process.env.FRONTEND_URL,
-  ].filter(Boolean),
+  origin: (origin, callback) => {
+    // No Origin header at all: same-origin navigations, curl, native mobile
+    // (iOS/Android send none). These are not browser cross-origin requests, so
+    // there is nothing for CORS to protect against.
+    if (!origin) return callback(null, true);
+    if (STATIC_ORIGINS.includes(origin)) return callback(null, true);
+    if (allowLanOrigins && isPrivateOrigin(origin)) return callback(null, true);
+    // Rejecting by returning false, not an Error: an Error here becomes a 500
+    // and hides the real cause. false simply omits the CORS headers, which is
+    // the correct, spec-defined "not allowed" response.
+    return callback(null, false);
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS","PATCH"],
-  allowedHeaders: ["Content-Type"],
+  // Must list every custom header a client actually sends: a preflight that
+  // does not echo one back makes the browser block the request outright, which
+  // surfaces in the app as "cannot reach the server" rather than as a CORS
+  // error. The native app sends x-client on every request (config/clientKind.js)
+  // and Authorization once signed in, since its session is a bearer token
+  // rather than the browser's cookie.
+  allowedHeaders: ["Content-Type", "Authorization", "x-client"],
 };
 
 app.use(cors(corsOptions));

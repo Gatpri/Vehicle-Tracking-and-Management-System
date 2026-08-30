@@ -1,0 +1,70 @@
+# Development overlay — restart the backend automatically when its source changes.
+#
+# What this fixes
+# ---------------
+# docker-compose.yml already bind-mounts ./vite-project/backend_api into the
+# container, so an edit on the host is visible inside it straight away. What is
+# missing is anything telling the Node process to pick the change up: the
+# production command is a plain `node backend_api/index.js`, which reads each
+# file once at startup. The result is a container that looks perfectly healthy
+# while serving code that no longer matches the repo — exactly how a fix can
+# sit dead for hours with no error to point at it.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d backend
+#
+# Back to the production command:
+#   docker compose up -d backend
+#
+# Not applied unless you name it explicitly, so a plain `docker compose up`
+# still runs exactly what deploys.
+#
+# Still manual: `npm run lan` when the LAN IP changes. Those values are read
+# into the container's environment at start, not from a file a watcher sees.
+
+services:
+  backend:
+    # A polling watcher, not `node --watch`.
+    #
+    # --watch was tried first and does NOT work here. The bind mount delivers
+    # the file (confirmed by grepping it inside the container), but node's
+    # watcher is built on libuv/inotify, and Docker Desktop does not propagate
+    # inotify events from a Windows host into a Linux container. The process
+    # never notices. CHOKIDAR_USEPOLLING does not rescue it either — that
+    # variable is read by chokidar (nodemon, webpack), not node's own watcher.
+    #
+    # `docker compose watch` is the other obvious candidate and also fails on
+    # this project: it refuses to monitor a path that is already a bind mount
+    # ("this path won't be monitored!"), and that mount is declared in the base
+    # compose file, where it is wanted.
+    #
+    # So the watching happens inside the container, by polling, which works
+    # regardless of inotify. busybox is all the image has, hence a shell loop
+    # rather than a watcher dependency. `find -newer` against a stamp file is
+    # one stat sweep per second over ~100 files: negligible, and confined here.
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        cd /app
+        stamp=/tmp/.watch-stamp
+        touch "$$stamp"
+        node backend_api/index.js &
+        pid=$$!
+        while true; do
+          sleep 1
+          if [ -n "$$(find backend_api -type f -newer "$$stamp" -print -quit 2>/dev/null)" ]; then
+            echo "[dev-watch] change detected - restarting backend"
+            touch "$$stamp"
+            kill "$$pid" 2>/dev/null || true
+            wait "$$pid" 2>/dev/null || true
+            node backend_api/index.js &
+            pid=$$!
+          fi
+        done
+
+    environment:
+      # The production image sets NODE_ENV=production, which suppresses stack
+      # traces in some libraries. Development wants the verbose behaviour.
+      NODE_ENV: development

@@ -76,18 +76,39 @@ if (!errors.isEmpty()) {
       expiresAt: new Date(Date.now() + VERIFY_WINDOW_MIN * 60 * 1000),
     });
 
-      // Send verification email
-    const link = `${BACKEND_BASE_URL}/api/verify-email?token=${token}`;
+      // Send verification email.
+    // `client` rides along on the link so the verify handler knows whether to
+    // redirect into the React SPA (browser signup) or render its own
+    // self-contained page (phone signup, where the Vite dev server is not
+    // something the device can be relied on to reach).
+    const client = req.get("x-client") === "mobile" ? "mobile" : "web";
+    const link = `${BACKEND_BASE_URL}/api/verify-email?token=${token}&client=${client}`;
     await mailer.send({
       to: email,
       from: "saugatkapri@gmail.com",       
       subject: "Verify your email",
+      // A styled anchor plus the bare URL underneath. Mobile mail clients are
+      // the reason for the second copy: some render a plain <a> as untappable
+      // text, and the user is then left with an email that appears to contain
+      // no link at all. The visible URL can always be copied by hand.
       html: `
-        <h2>We are pleased to welcome you in our community!</h2>
-        <p>Click the link below to verify your email address:</p>
-        <a href="${link}">Verify my email</a>
-        <p>This link expires in ${VERIFY_WINDOW_MIN} minutes.</p>
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#0f1e3a">
+          <h2 style="margin:0 0 12px">Welcome to Vehicle Safety!</h2>
+          <p style="color:#475569;line-height:1.6">Tap the button below to verify your email address and finish creating your account.</p>
+          <p style="margin:28px 0">
+            <a href="${link}" style="background:#1d4ed8;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;display:inline-block;font-weight:600">Verify my email</a>
+          </p>
+          <p style="color:#475569;line-height:1.6;font-size:14px">If the button doesn't work, copy this address into your browser:</p>
+          <p style="word-break:break-all;font-size:13px;color:#1d4ed8">${link}</p>
+          <p style="color:#94a3b8;font-size:13px;margin-top:24px">This link expires in ${VERIFY_WINDOW_MIN} minutes.</p>
+        </div>
       `,
+      text: `Welcome to Vehicle Safety!
+
+Verify your email address by opening this link:
+${link}
+
+This link expires in ${VERIFY_WINDOW_MIN} minutes.`,
     });
 
     res.json({
@@ -119,21 +140,95 @@ router.get("/registration-status", async (req, res) => {
   res.json({ verified: !!user });
 });
 
-// After verification link is clicked, land the user on a dedicated
-// /email-verified result page (no dead-end backend page, and no bouncing
-// through /login) — the status param drives which message it shows.
+// Rendered to whoever clicked the link in the email. A phone opens that link
+// in Safari/Gmail's browser, which has no session and — during development —
+// often cannot reach the Vite dev server at all. So the mobile flow gets a
+// complete, self-contained page served straight off the backend; only the
+// browser flow redirects into the React SPA's /email-verified route.
+const RESULT_COPY = {
+  success: {
+    icon: "✓",
+    accent: "#16a34a",
+    title: "Email Verified!",
+    text: "Your account is confirmed. Return to the Vehicle Safety app — you can sign in now.",
+  },
+  expired: {
+    icon: "!",
+    accent: "#d97706",
+    title: "Link Expired",
+    text: `That verification link is older than ${VERIFY_WINDOW_MIN} minutes. Please register again to get a fresh one.`,
+  },
+  invalid: {
+    icon: "!",
+    accent: "#dc2626",
+    title: "Invalid Link",
+    text: "That verification link isn't valid. Please register again to receive a fresh one.",
+  },
+  error: {
+    icon: "!",
+    accent: "#dc2626",
+    title: "Something Went Wrong",
+    text: "We couldn't verify your email right now. Please try registering again.",
+  },
+};
+
+const renderResultPage = (status) => {
+  const { icon, accent, title, text } = RESULT_COPY[status] || RESULT_COPY.error;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${title}</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:#f1f5f9; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         padding:24px; }
+  .card { background:#fff; border-radius:20px; padding:40px 28px; max-width:380px; width:100%;
+          text-align:center; box-shadow:0 10px 40px rgba(15,30,58,.12); }
+  .badge { width:72px; height:72px; border-radius:50%; margin:0 auto 20px; display:flex;
+           align-items:center; justify-content:center; font-size:36px; font-weight:700;
+           color:#fff; background:${accent}; }
+  h1 { margin:0 0 12px; font-size:23px; color:#0f1e3a; }
+  p { margin:0; color:#475569; line-height:1.6; font-size:15px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">${icon}</div>
+    <h1>${title}</h1>
+    <p>${text}</p>
+  </div>
+</body>
+</html>`;
+};
+
+// Browser signups keep bouncing to the SPA's /email-verified route (no
+// dead-end backend page); mobile signups get the page above.
+const finishVerification = (res, client, status) => {
+  if (client === "mobile") {
+    return res.status(200).type("html").send(renderResultPage(status));
+  }
+  return res.redirect(`${FRONTEND_URL}/email-verified?status=${status}`);
+};
+
 router.get("/verify-email", async (req, res) => {
+  const client = req.query.client === "mobile" ? "mobile" : "web";
   try {
     const { token } = req.query;
     const record = await PendingUser.findOne({ token });
 
     if (!record) {
-      return res.redirect(`${FRONTEND_URL}/email-verified?status=invalid`);
+      // A second tap of the same link lands here, because the pending row was
+      // deleted by the first one. Treat an already-created account as success
+      // rather than telling a verified user their link is invalid.
+      return finishVerification(res, client, "invalid");
     }
 
     if (Date.now() > record.expiresAt.getTime()) {
       await PendingUser.deleteOne({ token });
-      return res.redirect(`${FRONTEND_URL}/email-verified?status=expired`);
+      return finishVerification(res, client, "expired");
     }
 
     // Guard the unique index on User.email: a second click of the same link,
@@ -152,11 +247,11 @@ router.get("/verify-email", async (req, res) => {
 
     await PendingUser.deleteOne({ token }); // cleanup
 
-    res.redirect(`${FRONTEND_URL}/email-verified?status=success`);
+    return finishVerification(res, client, "success");
   }
   catch(err){
     console.error("verify-email failed:", err);
-    res.redirect(`${FRONTEND_URL}/email-verified?status=error`);
+    return finishVerification(res, client, "error");
   }
 });
 

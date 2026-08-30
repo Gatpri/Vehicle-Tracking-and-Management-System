@@ -1,5 +1,9 @@
 {
   "dependencies": {
     "firebase": "^12.15.0"
+  },
+  "scripts": {
+    "lan": "node sync-lan-ip.mjs",
+    "lan:check": "node sync-lan-ip.mjs --check"
   }
 }
