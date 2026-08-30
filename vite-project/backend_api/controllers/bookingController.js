@@ -86,7 +86,7 @@ export const listMyBookings = async (req, res) => {
     // deliveryFee is a plain field directly on the booking (the one combined
     // round-trip fee, if a delivery leg was assigned) — no join needed.
     const bookings = await ServiceRequest.find(filter)
-      .populate("vehicle", "plateNumber make model")
+      .populate("vehicle", "plateNumber make model vehicleType")
       .populate("workshop", "name location")
       .sort({ createdAt: -1 });
 
@@ -109,7 +109,7 @@ export const listBookings = async (req, res) => {
     }
 
     const bookings = await ServiceRequest.find(filter)
-      .populate("vehicle", "plateNumber make model")
+      .populate("vehicle", "plateNumber make model vehicleType")
       .populate("workshop", "name")
       .populate("user", "firstname lastname email")
       .sort({ createdAt: -1 });
@@ -232,7 +232,7 @@ export const getBookingPayment = async (req, res) => {
 export const getBooking = async (req, res) => {
   try {
     const booking = await ServiceRequest.findById(req.params.id)
-      .populate("vehicle", "plateNumber make model")
+      .populate("vehicle", "plateNumber make model vehicleType")
       .populate("workshop", "name managedBy");
     if (!booking) return res.status(404).json({ success: false, message: "Booking not found" });
 

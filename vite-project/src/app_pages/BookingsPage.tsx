@@ -13,6 +13,9 @@ import {
   canTrackDelivery,
   canSeePartsEstimate,
 } from "../lib/bookingWorkflow";
+// Shared so the pickup and RETURN legs agree on where the rider is headed —
+// see lib/deliveryDestination.ts for the bug this replaced.
+import { destinationFor } from "../lib/deliveryDestination";
 
 // Kept in sync with the backend's EN_ROUTE_STATUSES (deliveryController.js,
 // deliveryHandlers.js) — every status where a live map has something to show.
@@ -27,16 +30,11 @@ interface DeliveryLeg {
   workshop?: { name: string; location: { lat: number; lng: number } };
 }
 
-const EN_ROUTE_PICKUP_STATUSES = ["assigned", "en_route_to_pickup"];
 
-const destinationFor = (d: DeliveryLeg): { lat: number; lng: number } | undefined => {
-  if (d.leg === "pickup" && EN_ROUTE_PICKUP_STATUSES.includes(d.status)) {
-    return d.customerLocation ? { lat: d.customerLocation.lat, lng: d.customerLocation.lng } : undefined;
-  }
-  return d.workshop?.location;
-};
 
-function DeliveryTrackingPanel({ bookingId }: { bookingId: string }) {
+// vehicleType comes from the booking rather than the delivery: the map shows
+// the customer's own vehicle being moved, so the glyph has to match it.
+function DeliveryTrackingPanel({ bookingId, vehicleType }: { bookingId: string; vehicleType?: string | null }) {
   const [deliveries, setDeliveries] = useState<DeliveryLeg[]>([]);
   const [loading, setLoading] = useState(true);
   const [reviewableIds, setReviewableIds] = useState<Set<string>>(new Set());
@@ -70,7 +68,13 @@ function DeliveryTrackingPanel({ bookingId }: { bookingId: string }) {
             {d.staff && ` · ${d.staff.firstname} ${d.staff.lastname}`}
           </p>
           {EN_ROUTE_STATUSES.includes(d.status) && (
-            <LiveDeliveryMap deliveryId={d._id} status={d.status} destination={destinationFor(d)} height={260} />
+            <LiveDeliveryMap
+              deliveryId={d._id}
+              status={d.status}
+              destination={destinationFor(d)}
+              vehicleType={vehicleType}
+              height={260}
+            />
           )}
           {d.staff && reviewableIds.has(d._id) && (
             <DeliveryStaffReviewForm
@@ -87,7 +91,7 @@ function DeliveryTrackingPanel({ bookingId }: { bookingId: string }) {
 
 interface Booking {
   _id: string;
-  vehicle: { _id: string; plateNumber: string; make: string; model: string };
+  vehicle: { _id: string; plateNumber: string; make: string; model: string; vehicleType?: string };
   workshop: { _id: string; name: string };
   serviceType: string;
   // One of BOOKING_STATUS (lib/bookingWorkflow.ts) — left as a plain string
@@ -331,7 +335,7 @@ function BookingsPage() {
 
               {openDeliveryId === b._id && (
                 <div style={{ margin: "10px 0 18px" }}>
-                  <DeliveryTrackingPanel bookingId={b._id} />
+                  <DeliveryTrackingPanel bookingId={b._id} vehicleType={b.vehicle?.vehicleType} />
                 </div>
               )}
 

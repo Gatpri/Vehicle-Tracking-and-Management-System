@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import LiveDeliveryMap from "../components/LiveDeliveryMap";
+import { destinationFor } from "../lib/deliveryDestination";
 import { legStatusLabel } from "../lib/bookingWorkflow";
 
 interface AssignableRow {
@@ -9,7 +10,7 @@ interface AssignableRow {
     _id: string;
     serviceType: string;
     pickupLocation?: { lat: number; lng: number; address: string };
-    vehicle: { plateNumber: string; make: string; model: string };
+    vehicle: { plateNumber: string; make: string; model: string; vehicleType?: string };
     user: { firstname: string; lastname: string; email: string };
   };
   leg: "pickup" | "return";
@@ -39,7 +40,7 @@ interface DeliveryRow {
   // legs (paid once, to whichever single staff member does the round trip).
   booking: {
     serviceType: string;
-    vehicle: { plateNumber: string } | null;
+    vehicle: { plateNumber: string; vehicleType?: string } | null;
     deliveryFee?: number | null;
     distanceKm?: number | null;
   } | null;
@@ -51,18 +52,11 @@ interface DeliveryRow {
 // Kept in sync with the backend's EN_ROUTE_STATUSES (deliveryController.js,
 // deliveryHandlers.js) — every status where a live map has something to show.
 const EN_ROUTE = ["en_route_to_pickup", "en_route_to_workshop", "en_route_to_dropoff"];
-// Separate list: which destination pin to show (pickup point vs. workshop),
-// not whether tracking is live — deliberately does NOT include
-// en_route_to_workshop, since by then the destination is the workshop,
-// already covered by the fallback branch below.
-const EN_ROUTE_PICKUP = ["assigned", "en_route_to_pickup"];
+// Which destination to route toward now lives in lib/deliveryDestination.ts,
+// shared with the customer and staff views so all three agree — they had
+// drifted, and each carried the same return-leg bug.
 
-const destinationFor = (row: DeliveryRow): { lat: number; lng: number } | undefined => {
-  if (row.leg === "pickup" && EN_ROUTE_PICKUP.includes(row.status)) {
-    return row.customerLocation ? { lat: row.customerLocation.lat, lng: row.customerLocation.lng } : undefined;
-  }
-  return row.workshop?.location;
-};
+
 
 
 function AssignRow({ row, onAssigned }: { row: AssignableRow; onAssigned: () => void }) {
@@ -174,7 +168,13 @@ function InFlightRow({ row }: { row: DeliveryRow }) {
       </div>
       {expanded && EN_ROUTE.includes(row.status) && (
         <div style={{ margin: "10px 0 18px" }}>
-          <LiveDeliveryMap deliveryId={row._id} status={row.status} destination={destinationFor(row)} height={260} />
+          <LiveDeliveryMap
+            deliveryId={row._id}
+            status={row.status}
+            destination={destinationFor(row)}
+            vehicleType={row.booking?.vehicle?.vehicleType}
+            height={260}
+          />
         </div>
       )}
     </div>

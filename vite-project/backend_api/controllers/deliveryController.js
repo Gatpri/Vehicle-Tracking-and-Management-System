@@ -101,7 +101,7 @@ export const listAssignableBookings = async (req, res) => {
       status: { $in: [BOOKING_STATUS.DELIVERY_REQUESTED, BOOKING_STATUS.COMPLETED] },
       deliveryRequested: true,
     })
-      .populate("vehicle", "plateNumber make model")
+      .populate("vehicle", "plateNumber make model vehicleType")
       .populate("user", "firstname lastname email")
       .sort({ createdAt: -1 });
 
@@ -410,7 +410,7 @@ export const listMyDeliveries = async (req, res) => {
       .populate({
         path: "booking",
         select: "vehicle serviceType status paymentStatus pickupLocation deliveryFee distanceKm",
-        populate: { path: "vehicle", select: "plateNumber make model" },
+        populate: { path: "vehicle", select: "plateNumber make model vehicleType" },
       })
       .populate("workshop", "name location address")
       .sort({ createdAt: -1 });
@@ -442,7 +442,7 @@ export const listDeliveries = async (req, res) => {
       .populate({
         path: "booking",
         select: "vehicle serviceType status paymentStatus deliveryFee distanceKm",
-        populate: { path: "vehicle", select: "plateNumber make model" },
+        populate: { path: "vehicle", select: "plateNumber make model vehicleType" },
       })
       .populate("workshop", "name area region location")
       .populate("staff", "firstname lastname email")

@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../../lib/api";
 import { getSocket } from "../../lib/socket";
 import LiveDeliveryMap from "../../components/LiveDeliveryMap";
+import { destinationWithLabel } from "../../lib/deliveryDestination";
 import { legStatusLabel } from "../../lib/bookingWorkflow";
 
 type DeliveryStatus =
@@ -194,10 +195,10 @@ function DeliveryCard({ delivery, onUpdated }: { delivery: Delivery; onUpdated: 
     }
   };
 
-  const destination =
-    delivery.leg === "pickup" && ["assigned", "en_route_to_pickup"].includes(delivery.status)
-      ? { ...delivery.customerLocation, label: "Pickup point" }
-      : { ...delivery.workshop?.location, label: delivery.workshop?.name ?? "Workshop" };
+  // Shared with the customer and admin views. Previously this fell through to
+  // the workshop on the return leg, so a rider carrying a finished vehicle back
+  // to its owner was navigated to the workshop they had just left.
+  const destination = destinationWithLabel(delivery);
 
   return (
     <div className="uh-card" style={{ marginBottom: 16 }}>
@@ -240,8 +241,12 @@ function DeliveryCard({ delivery, onUpdated }: { delivery: Delivery; onUpdated: 
         <div style={{ marginTop: 12 }}>
           <LiveDeliveryMap
             deliveryId={delivery._id}
-            fixedPoints={destination.lat != null && destination.lng != null ? [destination as { lat: number; lng: number; label: string }] : []}
-            destination={destination.lat != null && destination.lng != null ? (destination as { lat: number; lng: number }) : undefined}
+            fixedPoints={destination ? [destination] : []}
+            destination={destination}
+            // This is the rider's own screen: they get the compass-rotating
+            // navigation arrow rather than a vehicle glyph, and instructions
+            // ("Return to the customer") rather than customer-facing wording.
+            viewer="rider"
             status={delivery.status}
             height={260}
           />

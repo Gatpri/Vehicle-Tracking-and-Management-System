@@ -1,0 +1,122 @@
+/* Navigation bar under the live delivery map.
+ *
+ * Modelled on a phone navigation view: the ETA is the one number anyone reads,
+ * so it is large and green, with distance and arrival time supporting it and
+ * the leg description on the right. This replaced a line of raw latitude and
+ * longitude, which was accurate and completely useless to a customer.
+ */
+
+.ldm-navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 10px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+  flex-wrap: wrap;
+}
+
+.ldm-nav-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Green for the ETA, matching every consumer navigation app — it reads as
+   "on track" rather than as a warning. */
+.ldm-eta {
+  font-size: 22px;
+  font-weight: 700;
+  color: #16a34a;
+  line-height: 1.1;
+}
+
+/* Same slot as .ldm-eta but for the moment before the first route comes back,
+   so the bar does not jump in height when the number arrives. */
+.ldm-eta-pending {
+  font-size: 22px;
+  font-weight: 700;
+  color: #2563eb;
+  line-height: 1.1;
+}
+
+.ldm-nav-sub {
+  font-size: 13px;
+  color: #475569;
+}
+
+.ldm-nav-leg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0f1e3a;
+  text-align: right;
+}
+
+.ldm-nav-seen {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+.ldm-nav-idle {
+  margin-top: 10px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 13px;
+  color: #475569;
+}
+
+/* Leaflet gives every divIcon a white background and border by default, which
+   would box each glyph in a white square. */
+.ldm-vehicle-marker,
+.ldm-nav-arrow {
+  background: transparent;
+  border: none;
+}
+
+/* Both markers move in discrete GPS jumps every few seconds. Without a
+   transition they teleport; with one they glide between fixes the way a live
+   map is expected to. Leaflet positions markers with `transform`, so this
+   animates the position itself. */
+.ldm-vehicle-marker,
+.ldm-nav-arrow {
+  transition: transform 0.8s linear;
+}
+
+/* The compass feeds many readings a second and is noisy at low speed. The
+   inner wrapper carries the rotation, so easing it here smooths the heading
+   without affecting how the marker travels across the map. */
+.ldm-nav-arrow > div {
+  transition: transform 0.25s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ldm-vehicle-marker,
+  .ldm-nav-arrow,
+  .ldm-nav-arrow > div {
+    transition: none;
+  }
+}
+
+/* On a narrow screen the two halves stack rather than squeezing the ETA. */
+@media (max-width: 480px) {
+  .ldm-navbar {
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .ldm-nav-leg {
+    align-items: flex-start;
+    text-align: left;
+  }
+}
