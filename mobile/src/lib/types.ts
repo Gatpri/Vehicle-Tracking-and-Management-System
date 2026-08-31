@@ -207,6 +207,22 @@ export interface Delivery {
   pickupAddress?: string;
   dropoffAddress?: string;
   createdAt?: string;
+  /**
+   * The two ends of the journey. Both are returned by /deliveries/mine and
+   * /deliveries, and both are needed to work out where the rider is currently
+   * headed (see lib/deliveryDestination.ts).
+   *
+   * They were missing from this interface while the API had always sent them,
+   * so anything reading them type-checked cleanly and then silently received
+   * `undefined` at runtime — which is exactly what left the rider's navigation
+   * map with no destination and therefore no route and no ETA.
+   *
+   * customerLocation is copied onto the Delivery at assignment time (see
+   * models/Delivery.js) rather than read through the booking, so a later edit
+   * to the booking cannot move a journey that is already under way.
+   */
+  customerLocation?: { lat: number; lng: number; address?: string } | null;
+  workshop?: { _id?: string; name?: string; address?: string; location?: { lat: number; lng: number } | null } | string | null;
 }
 
 export interface LocationPoint {
@@ -216,6 +232,14 @@ export interface LocationPoint {
   lng?: number;
   recordedAt?: string;
   createdAt?: string;
+  /**
+   * Degrees clockwise from north, as the rider's phone reported it. Stored on
+   * every delivery fix (models/DeliveryLocationHistory.js) and used to point
+   * the vehicle marker the right way; null when the device has no compass.
+   */
+  heading?: number | null;
+  /** Metres per second, when the device reports it. */
+  speed?: number | null;
 }
 
 /**

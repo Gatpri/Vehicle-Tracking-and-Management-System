@@ -32,6 +32,9 @@ export default function TrackingScreen() {
   const { vehicleId } = useLocalSearchParams<{ vehicleId: string }>();
   const [live, setLive] = useState<LocationPoint | null>(null);
   const [activeDelivery, setActiveDelivery] = useState<DeliveryRow | null>(null);
+  // Drives the marker glyph: a customer watching their own car should see a
+  // car, not a generic dot. Mirrors the web app's LiveDeliveryMap.
+  const [vehicleType, setVehicleType] = useState<string | null>(null);
 
   const history = useApi<LocationPoint[]>(
     vehicleId ? `/tracking/${vehicleId}/history` : null,
@@ -63,6 +66,11 @@ export default function TrackingScreen() {
         const id = typeof b.vehicle === "object" ? (b.vehicle as { _id?: string })?._id : b.vehicle;
         return String(id) === String(vehicleId);
       });
+
+      const populated = forVehicle.find((b) => typeof b.vehicle === "object");
+      if (populated) {
+        setVehicleType((populated.vehicle as { vehicleType?: string })?.vehicleType ?? null);
+      }
 
       // Newest first, so an in-flight leg is found before older history.
       for (const booking of forVehicle) {
@@ -159,8 +167,14 @@ export default function TrackingScreen() {
     ? [
         {
           ...currentPoint,
-          title: activeDelivery ? "Delivery rider" : "Current position",
+          title: activeDelivery ? "Your vehicle" : "Current position",
           color: activeDelivery ? colors.orange500 : colors.blue700,
+          // Only while a rider is carrying it: the glyph plus its heading
+          // arrow means "this is moving", which is exactly what is not true
+          // of a parked vehicle reporting its own position.
+          ...(activeDelivery
+            ? { kind: (vehicleType ?? "car") as MapPoint["kind"], heading: current?.heading ?? null }
+            : {}),
         },
       ]
     : [];
@@ -187,7 +201,7 @@ export default function TrackingScreen() {
 
       {currentPoint || track.length > 0 ? (
         <View style={styles.mapWrap}>
-          <Map points={markers} path={track} />
+          <Map points={markers} path={track} title="Live tracking" />
         </View>
       ) : (
         <Empty message="No location has been recorded for this vehicle yet." />

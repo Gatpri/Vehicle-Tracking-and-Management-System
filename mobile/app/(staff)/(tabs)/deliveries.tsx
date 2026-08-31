@@ -8,6 +8,8 @@ import { legStatusLabel } from "../../../src/lib/bookingWorkflow";
 import { nextStepFor, isEnRoute, type DeliveryStatus } from "../../../src/lib/deliveryWorkflow";
 import { Screen, Card, Heading, Muted, Button, Badge, Loading, ErrorNote, Empty, Row } from "../../../src/components/ui";
 import { colors, spacing } from "../../../src/theme";
+import { RiderNavMap } from "../../../src/components/RiderNavMap";
+import { destinationWithLabel } from "../../../src/lib/deliveryDestination";
 import { vehicleLabel, type Delivery } from "../../../src/lib/types";
 
 /**
@@ -34,12 +36,36 @@ export default function StaffDeliveriesScreen() {
 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [sharingId, setSharingId] = useState<string | null>(null);
+  // The rider's own latest fix, mirrored from the GPS watch below so the map
+  // can draw it. Deliberately fed from the SAME watch that pushes to the
+  // server — a second watchPositionAsync would double the battery cost and
+  // compete with the first for fixes.
+  const [myPosition, setMyPosition] = useState<{ lat: number; lng: number; heading?: number | null } | null>(null);
+  // Set when the rider denies (or has previously denied) location. Without
+  // this the only feedback was a one-shot Alert: dismiss it and the screen
+  // looked identical to a working one, with the map silently never filling in.
+  const [locationDenied, setLocationDenied] = useState(false);
   const watcher = useRef<Location.LocationSubscription | null>(null);
+  // The device compass, watched separately from position.
+  //
+  // pos.coords.heading is GPS *course* — the direction of travel — which the
+  // OS reports as -1 or null while stationary or moving slowly, so the arrow
+  // froze at a stop and pointed nowhere when the rider was walking the vehicle.
+  // watchHeadingAsync reads the magnetometer instead, so the arrow follows
+  // wherever the phone is physically pointed, moving or not.
+  const compass = useRef<Location.LocationSubscription | null>(null);
+  // Held in a ref as well as state: the position callback needs the newest
+  // value without re-subscribing every time the rider turns.
+  const headingRef = useRef<number | null>(null);
 
   const stopSharing = () => {
     watcher.current?.remove();
     watcher.current = null;
+    compass.current?.remove();
+    compass.current = null;
+    headingRef.current = null;
     setSharingId(null);
+    setMyPosition(null);
   };
 
   const startSharing = async (delivery: DeliveryRow) => {
@@ -48,6 +74,7 @@ export default function StaffDeliveriesScreen() {
     // foreground first is rejected outright on both platforms.
     const fg = await Location.requestForegroundPermissionsAsync();
     if (fg.status !== "granted") {
+      setLocationDenied(true);
       Alert.alert(
         "Location needed",
         "Your location is shared while a delivery is under way so the customer can track their vehicle."
@@ -58,6 +85,42 @@ export default function StaffDeliveriesScreen() {
     // open, so this is a nudge rather than a blocker.
     await Location.requestBackgroundPermissionsAsync().catch(() => undefined);
 
+    setLocationDenied(false);
+
+    // Compass first, so the arrow has a direction before the first GPS fix.
+    // trueHeading needs location permission (granted above) and comes back as
+    // -1 when unavailable; magHeading is the magnetic fallback. A phone with
+    // no magnetometer simply never fires this, and the arrow falls back to
+    // GPS course, so this is wrapped rather than allowed to break sharing.
+    try {
+      compass.current = await Location.watchHeadingAsync((h) => {
+        const deg = h.trueHeading >= 0 ? h.trueHeading : h.magHeading;
+        if (typeof deg !== "number" || deg < 0) return;
+        headingRef.current = deg;
+
+        // Ignore changes under 5°.
+        //
+        // The magnetometer reports many times a second and drifts a degree or
+        // two even lying still, so forwarding every reading would re-render the
+        // screen continuously and make the arrow twitch in place. 5° is small
+        // enough that turning feels continuous and large enough to sit above
+        // the sensor noise — and each accepted step remounts the marker to
+        // apply the rotation, so the threshold is what keeps that cheap.
+        setMyPosition((prev) => {
+          if (!prev) return prev;
+          const prevDeg = prev.heading;
+          if (typeof prevDeg === "number") {
+            // Shortest angular distance, so 359° -> 1° counts as 2°, not 358°.
+            const diff = Math.abs(((deg - prevDeg + 540) % 360) - 180);
+            if (diff < 5) return prev;
+          }
+          return { ...prev, heading: deg };
+        });
+      });
+    } catch {
+      // No compass on this device — GPS course still drives the arrow.
+    }
+
     watcher.current = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.High,
@@ -67,14 +130,21 @@ export default function StaffDeliveriesScreen() {
         timeInterval: 5000,
       },
       (pos) => {
+        // Compass first: it reflects where the phone is pointed even at a
+        // standstill, which GPS course cannot do.
+        const heading =
+          headingRef.current ??
+          (typeof pos.coords.heading === "number" && pos.coords.heading >= 0 ? pos.coords.heading : null);
+        setMyPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude, heading });
         getSocket().emit("delivery:push", {
           deliveryId: delivery._id,
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           speed: pos.coords.speed ?? undefined,
-          // The device compass, which the web version had to request through a
-          // separate permission-gated API. Here it arrives with the fix.
-          heading: pos.coords.heading ?? undefined,
+          // Sent so everyone watching sees the vehicle marker point the right
+          // way too — the same field the web app's LiveDeliveryMap prefers
+          // over its own travel-direction estimate.
+          heading: heading ?? undefined,
         });
       }
     );
@@ -183,11 +253,36 @@ export default function StaffDeliveriesScreen() {
             {enRoute ? (
               <View style={sharing ? styles.sharingOn : styles.sharingOff}>
                 <Text style={sharing ? styles.sharingOnText : styles.sharingOffText}>
+                  {/* Three states, not two. "Starting…" was previously shown
+                      for a denial as well, which reads as "wait a moment"
+                      forever and hides the one thing the rider must act on. */}
                   {sharing
                     ? "Sharing your location — the customer can see you moving."
+                    : locationDenied
+                    ? "Location is off, so nobody can see this delivery moving. Enable location for this app, then tap Retry."
                     : "Starting location sharing…"}
                 </Text>
+                {locationDenied ? (
+                  <Button title="Retry" small variant="outline" onPress={() => startSharing(d)} />
+                ) : null}
               </View>
+            ) : null}
+
+            {/* The rider's own navigation view. Until this existed the app
+                pushed a track the rider could not see: no route, no direction,
+                no ETA.
+                Gated on `enRoute` alone, NOT on `sharing`: sharing only turns
+                true after two permission dialogs have been answered, so gating
+                on it meant a rider who denied location — or who was simply
+                waiting on the prompt — saw no map at all and no explanation.
+                The map now appears with the destination and route immediately,
+                and fills in the rider's own arrow once a fix arrives. */}
+            {enRoute ? (
+              <RiderNavMap
+                position={myPosition}
+                destination={destinationWithLabel(d)}
+                status={d.status}
+              />
             ) : null}
 
             <View style={styles.actions}>

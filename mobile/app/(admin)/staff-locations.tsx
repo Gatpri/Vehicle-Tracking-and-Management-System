@@ -111,7 +111,7 @@ export default function AdminStaffLocationsScreen() {
 
       {points.length > 0 ? (
         <View style={styles.mapWrap}>
-          <Map points={points} />
+          <Map points={points} title="Delivery staff locations" />
         </View>
       ) : (
         <Empty message="No drivers are sharing their location right now." />

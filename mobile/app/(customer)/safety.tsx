@@ -60,7 +60,7 @@ export default function SafetyScreen() {
 
       {points.length > 0 ? (
         <View style={styles.mapWrap}>
-          <Map points={points} />
+          <Map points={points} title="Theft heatmap" />
         </View>
       ) : (
         <Empty message="No thefts have been reported in this area." />
