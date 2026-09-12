@@ -176,7 +176,7 @@ const s = StyleSheet.create({
   },
   slotFilled: { borderStyle: "solid", borderColor: colors.blue700 },
   slotPressed: { opacity: 0.7 },
-  thumb: { ...StyleSheet.absoluteFillObject, width: undefined, height: undefined },
+  thumb: { ...StyleSheet.absoluteFill, width: undefined, height: undefined },
   plus: { fontSize: 22, color: colors.slate400, fontWeight: "300" },
   slotLabel: { fontSize: 10, color: colors.slate600, fontWeight: "600", marginTop: 2 },
   badge: {

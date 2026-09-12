@@ -303,7 +303,10 @@ function Clip({ source, active }: { source: number; active: boolean }) {
         // would letterbox them into a thin strip in the middle of the frame.
         contentFit="cover"
         nativeControls={false}
-        allowsFullscreen={false}
+        // SDK 57 moved the fullscreen switch into fullscreenOptions; the
+        // intent is unchanged — a walkthrough step is not a video the viewer
+        // should scrub, take fullscreen, or send to a TV.
+        fullscreenOptions={{ enable: false }}
         allowsPictureInPicture={false}
       />
       <Animated.View pointerEvents="none" style={[styles.loopSeam, { opacity: seam }]} />
@@ -847,8 +850,8 @@ const styles = StyleSheet.create({
   captionBody: { color: "#94a3b8", fontSize: 13.5, lineHeight: 21, marginTop: 6 },
 
   /* ---- Footage ---- */
-  clipWrap: { ...StyleSheet.absoluteFillObject, backgroundColor: "#05080f" },
-  loopSeam: { ...StyleSheet.absoluteFillObject, backgroundColor: "#000" },
+  clipWrap: { ...StyleSheet.absoluteFill, backgroundColor: "#05080f" },
+  loopSeam: { ...StyleSheet.absoluteFill, backgroundColor: "#000" },
   clipLabel: {
     position: "absolute",
     left: spacing.md,

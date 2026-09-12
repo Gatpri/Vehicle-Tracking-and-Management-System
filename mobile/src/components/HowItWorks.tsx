@@ -85,7 +85,7 @@ const UI = {
   myVehicles: { en: "My Vehicles", ne: "मेरा गाडीहरू" },
   addVehicle: { en: "+ Add Vehicle", ne: "+ गाडी थप्नुहोस्" },
   plateNumber: { en: "Plate Number", ne: "नम्बर प्लेट" },
-  make: { en: "Make", ne: "कम्पनी" },
+  make: { en: "Brand", ne: "कम्पनी" },
   model: { en: "Model", ne: "मोडेल" },
   platePhotos: { en: "Number plate photos", ne: "नम्बर प्लेटका फोटो" },
   vehiclePhotos: { en: "Vehicle photos", ne: "गाडीका फोटो" },
@@ -1026,7 +1026,10 @@ function CctvFootage({ active }: { active: boolean }) {
         nativeControls={false}
         // A walkthrough step is not a video the user is meant to scrub, take
         // fullscreen, or send to a TV.
-        allowsFullscreen={false}
+        // SDK 57 moved the fullscreen switch into fullscreenOptions; the
+        // intent is unchanged — a walkthrough step is not a video the viewer
+        // should scrub, take fullscreen, or send to a TV.
+        fullscreenOptions={{ enable: false }}
         allowsPictureInPicture={false}
       />
       {/* The loop seam. Sits over the picture, so the wrap happens behind it. */}
@@ -1383,7 +1386,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  slotFill: { ...StyleSheet.absoluteFillObject, backgroundColor: "#16294f", alignItems: "center", justifyContent: "center" },
+  slotFill: { ...StyleSheet.absoluteFill, backgroundColor: "#16294f", alignItems: "center", justifyContent: "center" },
   slotFillVeh: { backgroundColor: "#1c3348" },
   slotPlateShape: { width: "52%", height: 6, borderRadius: 1, backgroundColor: "#e2e8f0", marginTop: 13 },
   slotVehShape: { width: "54%", height: 8, borderRadius: 3, backgroundColor: "#64748b", marginTop: 11 },
@@ -1504,12 +1507,12 @@ const styles = StyleSheet.create({
   camRecDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.red500 },
   camRecText: { color: "#fca5a5", fontSize: 7.5, fontWeight: "900", letterSpacing: 0.8 },
 
-  footageWrap: { ...StyleSheet.absoluteFillObject, backgroundColor: "#05080f" },
+  footageWrap: { ...StyleSheet.absoluteFill, backgroundColor: "#05080f" },
   /* A single translucent wash rather than a striped gradient: RN has no
      repeating-linear-gradient, and over real footage the effect only needs to
      knock the picture back a little so the burnt-in labels stay legible. */
-  scanOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(8,14,26,0.16)" },
-  loopSeam: { ...StyleSheet.absoluteFillObject, backgroundColor: "#05080f" },
+  scanOverlay: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(8,14,26,0.16)" },
+  loopSeam: { ...StyleSheet.absoluteFill, backgroundColor: "#05080f" },
 
   /* --- Read --- */
   readFrame: {

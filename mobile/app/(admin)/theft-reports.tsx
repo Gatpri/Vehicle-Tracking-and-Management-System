@@ -77,8 +77,8 @@ export default function AdminTheftScreen() {
             trailing={<Badge status={r.status} />}
           >
             <Row label="Filed" value={formatDateTime(r.createdAt)} />
-            {typeof r.vehicle === "object" && r.vehicle?.numberPlate ? (
-              <Row label="Plate" value={r.vehicle.numberPlate} />
+            {typeof r.vehicle === "object" && r.vehicle?.plateNumber ? (
+              <Row label="Plate" value={r.vehicle.plateNumber} />
             ) : null}
 
             <View style={styles.actions}>

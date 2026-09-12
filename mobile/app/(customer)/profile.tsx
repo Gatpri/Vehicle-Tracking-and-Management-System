@@ -39,7 +39,7 @@ export default function CustomerProfileScreen() {
             >
               <View style={styles.rowMain}>
                 <Text style={styles.rowTitle}>{vehicleLabel(v)}</Text>
-                <Muted>{v.numberPlate || "No plate recorded"}</Muted>
+                <Muted>{v.plateNumber || "No plate recorded"}</Muted>
               </View>
               {/* A flagged vehicle is a reported-stolen one — worth surfacing
                   anywhere the vehicle is listed at all. */}

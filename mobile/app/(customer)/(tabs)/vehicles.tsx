@@ -50,7 +50,7 @@ export default function VehiclesScreen() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
-  const [form, setForm] = useState({ make: "", model: "", year: "", numberPlate: "", color: "" });
+  const [form, setForm] = useState({ make: "", model: "", year: "", plateNumber: "", color: "" });
 
   // Held locally until the vehicle exists: the upload endpoint is
   // /vehicles/:id/photos, and there is no id before the POST succeeds.
@@ -60,7 +60,7 @@ export default function VehiclesScreen() {
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const reset = () => {
-    setForm({ make: "", model: "", year: "", numberPlate: "", color: "" });
+    setForm({ make: "", model: "", year: "", plateNumber: "", color: "" });
     setPlates({});
     setShots({});
     setProgress(null);
@@ -78,8 +78,8 @@ export default function VehiclesScreen() {
   };
 
   const submit = async () => {
-    if (!form.make.trim() || !form.model.trim() || !form.numberPlate.trim()) {
-      Alert.alert("Missing details", "Make, model and number plate are required.");
+    if (!form.make.trim() || !form.model.trim() || !form.plateNumber.trim()) {
+      Alert.alert("Missing details", "Brand, model and number plate are required.");
       return;
     }
     setBusy(true);
@@ -90,7 +90,7 @@ export default function VehiclesScreen() {
         // The field is a text input but the API expects a number; an empty or
         // non-numeric entry is sent as undefined rather than NaN.
         year: form.year.trim() ? Number(form.year.trim()) : undefined,
-        numberPlate: form.numberPlate.trim(),
+        plateNumber: form.plateNumber.trim(),
         color: form.color.trim() || undefined,
       });
 
@@ -150,7 +150,7 @@ export default function VehiclesScreen() {
                 <View style={styles.main}>
                   <Text style={styles.title}>{vehicleLabel(v)}</Text>
                   <Muted>
-                    {[v.numberPlate, v.year ? String(v.year) : null, v.color].filter(Boolean).join(" · ") ||
+                    {[v.plateNumber, v.year ? String(v.year) : null, v.color].filter(Boolean).join(" · ") ||
                       "No details recorded"}
                   </Muted>
                 </View>
@@ -181,7 +181,7 @@ export default function VehiclesScreen() {
               >
                 <Heading level={2}>Register a vehicle</Heading>
 
-                <Field label="Make" value={form.make} onChangeText={set("make")} placeholder="Toyota" autoCapitalize="words" />
+                <Field label="Brand" value={form.make} onChangeText={set("make")} placeholder="Toyota" autoCapitalize="words" />
                 <Field label="Model" value={form.model} onChangeText={set("model")} placeholder="Corolla" autoCapitalize="words" />
                 <Field
                   label="Year"
@@ -196,8 +196,8 @@ export default function VehiclesScreen() {
                 />
                 <Field
                   label="Number plate"
-                  value={form.numberPlate}
-                  onChangeText={set("numberPlate")}
+                  value={form.plateNumber}
+                  onChangeText={set("plateNumber")}
                   placeholder="BA 2 PA 1234"
                   autoCapitalize="characters"
                 />

@@ -84,7 +84,10 @@ export function useGoogleAuth(onToken: (sessionToken: string) => Promise<unknown
       // "dismiss" and "cancel" are the user backing out, which is not an error
       // worth showing them.
       if (response?.type === "error") {
-        setError(response.error?.message || "Google sign-in failed.");
+        // SDK 57: AuthError no longer carries `message`; `description` is
+        // the human-readable field. Kept behind a fallback so an error
+        // shape from either version still produces a usable string.
+        setError(response.error?.description || "Google sign-in failed.");
         setBusy(false);
       }
       return;

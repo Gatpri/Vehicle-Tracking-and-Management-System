@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { Stack, useRouter } from "expo-router";
 import { useAuth } from "../../src/lib/AuthContext";
 import { SideMenuProvider, SideMenuButton, type MenuLink } from "../../src/components/SideMenu";
+import TheftAlertOverlay from "../../src/components/TheftAlertOverlay";
 import { NotificationBell } from "../../src/components/NotificationBell";
 import { hasPermission } from "../../src/lib/permissions";
 import { landingPathFor, FULL_ADMIN_ROLES } from "../../src/lib/roles";
@@ -85,6 +86,11 @@ export default function AdminLayout() {
         <Stack.Screen name="my-wallet" options={{ title: "My wallet" }} />
         <Stack.Screen name="users" options={{ title: "Users" }} />
       </Stack>
+
+      {/* A camera spotting this user's stolen vehicle interrupts them
+          wherever they are, exactly as it does on the web. Renders
+          null until such an alert exists. */}
+      <TheftAlertOverlay />
     </SideMenuProvider>
   );
 }

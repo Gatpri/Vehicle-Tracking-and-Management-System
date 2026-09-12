@@ -133,7 +133,7 @@ export default function VehicleDetailScreen() {
       <View style={styles.head}>
         <View style={styles.headMain}>
           <Heading>{vehicleLabel(data)}</Heading>
-          <Muted>{data.numberPlate || "No plate recorded"}</Muted>
+          <Muted>{data.plateNumber || "No plate recorded"}</Muted>
         </View>
         {data.isFlagged ? <Badge status="stolen" /> : <Badge status={data.status || "active"} />}
       </View>
@@ -154,7 +154,7 @@ export default function VehicleDetailScreen() {
 
         {editing ? (
           <View style={styles.form}>
-            <Field label="Make" value={form.make} onChangeText={(v) => setForm({ ...form, make: v })} autoCapitalize="words" />
+            <Field label="Brand" value={form.make} onChangeText={(v) => setForm({ ...form, make: v })} autoCapitalize="words" />
             <Field label="Model" value={form.model} onChangeText={(v) => setForm({ ...form, model: v })} autoCapitalize="words" />
             <Field label="Colour" value={form.color} onChangeText={(v) => setForm({ ...form, color: v })} autoCapitalize="words" />
             <View style={styles.formActions}>
@@ -164,11 +164,11 @@ export default function VehicleDetailScreen() {
           </View>
         ) : (
           <>
-            <Row label="Make" value={data.make || "—"} />
+            <Row label="Brand" value={data.make || "—"} />
             <Row label="Model" value={data.model || "—"} />
             <Row label="Year" value={data.year ? String(data.year) : "—"} />
             <Row label="Colour" value={data.color || "—"} />
-            <Row label="Plate" value={data.numberPlate || "—"} />
+            <Row label="Plate" value={data.plateNumber || "—"} />
           </>
         )}
       </Card>

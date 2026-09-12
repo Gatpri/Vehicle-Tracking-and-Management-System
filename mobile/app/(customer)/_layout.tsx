@@ -1,5 +1,6 @@
 import { Stack } from "expo-router";
 import { SideMenuProvider, type MenuLink } from "../../src/components/SideMenu";
+import TheftAlertOverlay from "../../src/components/TheftAlertOverlay";
 import { colors } from "../../src/theme";
 
 /**
@@ -84,6 +85,11 @@ export default function CustomerLayout() {
         <Stack.Screen name="workshop/[id]" options={{ title: "Workshop" }} />
         <Stack.Screen name="tracking/[vehicleId]" options={{ title: "Tracking" }} />
       </Stack>
+
+      {/* A camera spotting this user's stolen vehicle interrupts them
+          wherever they are, exactly as it does on the web. Renders
+          null until such an alert exists. */}
+      <TheftAlertOverlay />
     </SideMenuProvider>
   );
 }

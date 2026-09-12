@@ -144,7 +144,7 @@ function VehicleDetailPage() {
           <form onSubmit={handleSave}>
             <div className="uh-form-row">
               <div className="uh-field">
-                <label htmlFor="make">Make</label>
+                <label htmlFor="make">Brand</label>
                 <input id="make" value={make} onChange={(e) => setMake(e.target.value)} required />
               </div>
               <div className="uh-field">

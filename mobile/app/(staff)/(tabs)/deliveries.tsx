@@ -4,6 +4,7 @@ import * as Location from "expo-location";
 import api, { getErrorMessage } from "../../../src/lib/api";
 import { useApi } from "../../../src/lib/useApi";
 import { getSocket } from "../../../src/lib/socket";
+import { startBackgroundTracking, stopBackgroundTracking } from "../../../src/lib/backgroundLocation";
 import { legStatusLabel } from "../../../src/lib/bookingWorkflow";
 import { nextStepFor, isEnRoute, type DeliveryStatus } from "../../../src/lib/deliveryWorkflow";
 import { Screen, Card, Heading, Muted, Button, Badge, Loading, ErrorNote, Empty, Row } from "../../../src/components/ui";
@@ -64,6 +65,11 @@ export default function StaffDeliveriesScreen() {
     compass.current?.remove();
     compass.current = null;
     headingRef.current = null;
+    // Also ends the background task and its notification. Leaving it running
+    // would keep the GPS radio warm for a delivery that has finished — the
+    // most visible kind of battery bug. Fire-and-forget: stopSharing is called
+    // from cleanup paths that cannot await.
+    void stopBackgroundTracking();
     setSharingId(null);
     setMyPosition(null);
   };
@@ -148,6 +154,22 @@ export default function StaffDeliveriesScreen() {
         });
       }
     );
+
+    // Keeps the track alive once the rider pockets the phone. The foreground
+    // watcher above is suspended by the OS the moment the app leaves the
+    // screen, which is exactly when a rider is actually driving — so without
+    // this the customer's map froze mid-journey with nothing to indicate it
+    // had stopped.
+    //
+    // Both watchers run together on purpose: the foreground one drives the
+    // on-screen map and the compass arrow, which a background task cannot
+    // provide. They emit the same event, and an overlapping fix is harmless.
+    //
+    // Not awaited, and a false result is not an error: if the rider declined
+    // background permission this returns false and sharing continues in the
+    // foreground alone, which is the documented degraded behaviour.
+    void startBackgroundTracking(delivery._id);
+
     setSharingId(delivery._id);
   };
 

@@ -87,7 +87,7 @@ const UI = {
   myVehicles: { en: "My Vehicles", ne: "मेरा गाडीहरू" },
   addVehicle: { en: "+ Add Vehicle", ne: "+ गाडी थप्नुहोस्" },
   plateNumber: { en: "Plate Number", ne: "नम्बर प्लेट" },
-  make: { en: "Make", ne: "कम्पनी" },
+  make: { en: "Brand", ne: "कम्पनी" },
   model: { en: "Model", ne: "मोडेल" },
   vYear: { en: "Year", ne: "वर्ष" },
   vColor: { en: "Color", ne: "रङ" },

@@ -75,7 +75,7 @@ export default function HomeScreen() {
             >
               <View style={styles.listMain}>
                 <Text style={styles.listTitle}>{vehicleLabel(v)}</Text>
-                <Muted>{v.numberPlate || "No plate recorded"}</Muted>
+                <Muted>{v.plateNumber || "No plate recorded"}</Muted>
               </View>
               {/* A flagged vehicle is a reported-stolen one — the single most
                   important thing this screen can surface. */}

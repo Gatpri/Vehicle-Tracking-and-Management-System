@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import api from "../../../src/lib/api";
 import { useApi } from "../../../src/lib/useApi";
 import { getSocket, subscribeWithReconnect } from "../../../src/lib/socket";
 import { isEnRoute } from "../../../src/lib/deliveryWorkflow";
+import { destinationFor } from "../../../src/lib/deliveryDestination";
+import { useRoute, formatDuration, formatDistance, formatArrival } from "../../../src/lib/useRoute";
 import { legStatusLabel } from "../../../src/lib/bookingWorkflow";
 import { Map, type MapPoint } from "../../../src/components/Map";
 import { Screen, Card, Heading, Muted, Loading, ErrorNote, Empty, Row } from "../../../src/components/ui";
@@ -163,6 +165,16 @@ export default function TrackingScreen() {
   const track = (history.data ?? []).map(asPoint).filter(Boolean) as { lat: number; lng: number }[];
   const currentPoint = asPoint(current);
 
+  // Where this leg is headed. destinationFor returns undefined for any status
+  // that is not "en route", so a parked vehicle draws no route line — which is
+  // correct: a line to somewhere would imply movement that is not happening.
+  // Both clients share this rule, so the customer's route matches the rider's.
+  const destination = activeDelivery ? destinationFor(activeDelivery) : undefined;
+
+  // The road ahead, and how long it takes. Same OSRM source the rider's own
+  // view and the web app already use, so all three agree on the path.
+  const { route, eta } = useRoute(currentPoint, destination);
+
   const markers: MapPoint[] = currentPoint
     ? [
         {
@@ -178,6 +190,18 @@ export default function TrackingScreen() {
         },
       ]
     : [];
+
+  // The destination pin, so the route line has a visible end. Labelled by leg
+  // rather than generically: on a return the vehicle is coming to the
+  // customer, and "Destination" would not tell them that.
+  if (destination) {
+    markers.push({
+      ...destination,
+      title:
+        activeDelivery?.status === "en_route_to_workshop" ? "Workshop" : "Your location",
+      color: colors.green500,
+    });
+  }
 
   if (history.loading || latest.loading) return <Loading label="Loading tracking…" />;
 
@@ -201,11 +225,29 @@ export default function TrackingScreen() {
 
       {currentPoint || track.length > 0 ? (
         <View style={styles.mapWrap}>
-          <Map points={markers} path={track} title="Live tracking" />
+          <Map points={markers} path={track} route={route} title="Live tracking" />
         </View>
       ) : (
         <Empty message="No location has been recorded for this vehicle yet." />
       )}
+
+      {/* Arrival, above the raw coordinates: "when does it get here" is the
+          question a customer actually opens this screen to answer, and a
+          lat/lng pair answers it for nobody. Shown only while a rider is
+          carrying the vehicle and OSRM returned an estimate. */}
+      {activeDelivery && eta ? (
+        <Card style={styles.etaCard}>
+          <Text style={styles.etaTime}>{formatDuration(eta.seconds)}</Text>
+          <Text style={styles.etaDetail}>
+            {`${formatDistance(eta.metres)} away · arriving around ${formatArrival(eta.seconds)}`}
+          </Text>
+          <Muted>
+            {activeDelivery.status === "en_route_to_workshop"
+              ? "On the way to the workshop"
+              : "On the way to you"}
+          </Muted>
+        </Card>
+      ) : null}
 
       {current ? (
         <Card>
@@ -223,4 +265,9 @@ export default function TrackingScreen() {
 
 const styles = StyleSheet.create({
   mapWrap: { overflow: "hidden" },
+  etaCard: { gap: 2 },
+  // Deliberately the largest text on the screen: it is the answer to the
+  // question the screen exists for.
+  etaTime: { fontSize: 30, fontWeight: "800", color: colors.slate900 },
+  etaDetail: { fontSize: 14, color: colors.slate600 },
 });

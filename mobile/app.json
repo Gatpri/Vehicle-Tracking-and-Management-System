@@ -21,7 +21,10 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Delivery staff share their location while a pickup or drop-off is in progress so customers can track their vehicle.",
         "NSCameraUsageDescription": "The camera is used to photograph vehicles and parts for service quotes.",
         "NSMicrophoneUsageDescription": "The microphone is used to record voice notes on parts quotes.",
-        "NSPhotoLibraryUsageDescription": "Photos are used to attach images to vehicles and service requests."
+        "NSPhotoLibraryUsageDescription": "Photos are used to attach images to vehicles and service requests.",
+        "UIBackgroundModes": [
+          "location"
+        ]
       }
     },
     "android": {
@@ -57,7 +60,9 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Delivery staff share their location while a pickup or drop-off is in progress so customers can track their vehicle."
+          "locationAlwaysAndWhenInUsePermission": "Delivery staff share their location while a pickup or drop-off is in progress so customers can track their vehicle.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       [

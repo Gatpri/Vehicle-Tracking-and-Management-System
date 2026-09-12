@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Image, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import api, { getErrorMessage } from "../../src/lib/api";
 import { useAuth } from "../../src/lib/AuthContext";
@@ -43,7 +44,19 @@ export default function AdminCctvScreen() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [mode, setMode] = useState<Mode>("sightings");
   const [scanning, setScanning] = useState(false);
-  const [lastScan, setLastScan] = useState<{ plate?: string; confidence?: number; image?: string } | null>(null);
+  const [lastScan, setLastScan] = useState<{
+    plate?: string;
+    confidence?: number;
+    image?: string;
+    /** Whether the read matched a vehicle flagged stolen — the whole point of
+     *  the scan, and previously discarded from the response. */
+    matchedStolen?: boolean;
+    matchedPlate?: string;
+  } | null>(null);
+
+  /** The most recent stolen match seen on this screen, from either a local
+   *  scan or another camera's detection arriving over the socket. */
+  const [alertBanner, setAlertBanner] = useState<{ plate: string; cameraId: string } | null>(null);
 
   const [slots, setSlots] = useState<DeviceSlot[]>([]);
   const [nextFacing, setNextFacing] = useState<"back" | "front">("back");
@@ -61,9 +74,20 @@ export default function AdminCctvScreen() {
   useEffect(() => {
     const socket = getSocket();
     // A sighting of a flagged vehicle is exactly what this screen exists for.
-    socket.on("theft:sighting", bump);
+    // Refreshing the list silently was not enough: an admin watching rows
+    // appear had no way to tell that one of them was an emergency. The banner
+    // names the plate and camera, matching the web's red alert bar.
+    const onSighting = (s: {
+      matchedVehicle?: { plateNumber?: string } | null;
+      cameraId?: string;
+    }) => {
+      const plate = s?.matchedVehicle?.plateNumber;
+      if (plate) setAlertBanner({ plate, cameraId: s.cameraId || "unknown camera" });
+      bump();
+    };
+    socket.on("theft:sighting", onSighting);
     return () => {
-      socket.off("theft:sighting", bump);
+      socket.off("theft:sighting", onSighting);
     };
   }, [bump]);
 
@@ -157,6 +181,24 @@ export default function AdminCctvScreen() {
         type: asset.mimeType || "image/jpeg",
       } as unknown as Blob);
 
+      // Identifies where the scan came from, as the web already does. Without
+      // it every mobile sighting was filed as "manual-upload" with no
+      // location, so the alert the owner receives could not say where their
+      // vehicle was seen — the single most useful fact in it.
+      formData.append("cameraId", "mobile-handheld");
+      try {
+        const perm = await Location.getForegroundPermissionsAsync();
+        if (perm.status === "granted") {
+          const pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          formData.append("lat", String(pos.coords.latitude));
+          formData.append("lng", String(pos.coords.longitude));
+        }
+      } catch {
+        // No fix — the sighting is still worth recording without coordinates.
+      }
+
       const res = await api.post("/cctv/scan", formData, {
         headers: { "Content-Type": "multipart/form-data" },
         // Plate recognition runs two YOLO stages on the sidecar, which takes
@@ -164,11 +206,22 @@ export default function AdminCctvScreen() {
         timeout: 60000,
       });
 
+      const sighting = res.data.sighting;
       setLastScan({
-        plate: res.data.sighting?.recognizedPlateText,
-        confidence: res.data.sighting?.confidence,
+        plate: sighting?.recognizedPlateText,
+        confidence: sighting?.confidence,
         image: asset.uri,
+        matchedStolen: !!sighting?.matchedStolen,
+        matchedPlate: sighting?.matchedVehicle?.plateNumber,
       });
+      // A stolen match found by this device raises the same banner a remote
+      // camera's detection does.
+      if (sighting?.matchedStolen) {
+        setAlertBanner({
+          plate: sighting.matchedVehicle?.plateNumber ?? sighting.recognizedPlateText ?? "",
+          cameraId: sighting.cameraId || "mobile-handheld",
+        });
+      }
       bump();
     } catch (err) {
       Alert.alert("Scan failed", getErrorMessage(err, "Could not read that plate."));
@@ -194,6 +247,19 @@ export default function AdminCctvScreen() {
   const header = (
     <View>
       {tabs}
+
+      {/* The red alert bar, matching the web's. Dismissable because an admin
+          may need to work past it, but never auto-hiding: a stolen sighting
+          that scrolled away unseen is the failure this screen exists to
+          prevent. */}
+      {alertBanner ? (
+        <Pressable onPress={() => setAlertBanner(null)} style={styles.alertBanner}>
+          <Text style={styles.alertBannerText}>
+            {`\u{1F6A8} Stolen match: ${alertBanner.plate} on ${alertBanner.cameraId}`}
+          </Text>
+          <Text style={styles.alertBannerDismiss}>Tap to dismiss</Text>
+        </Pressable>
+      ) : null}
 
       {mode === "live" && canSubmit ? (
         <Card>
@@ -299,6 +365,19 @@ export default function AdminCctvScreen() {
               {typeof lastScan.confidence === "number" ? (
                 <Muted>{`Confidence ${(lastScan.confidence * 100).toFixed(0)}%`}</Muted>
               ) : null}
+              {/* The result that matters. A read that matched a stolen vehicle
+                  used to look exactly like one that matched nothing. */}
+              {lastScan.matchedStolen ? (
+                <View style={styles.stolenTag}>
+                  <Text style={styles.stolenTagText}>
+                    {`STOLEN — matches ${lastScan.matchedPlate ?? lastScan.plate}`}
+                  </Text>
+                </View>
+              ) : lastScan.matchedPlate ? (
+                <Muted>{`Matched ${lastScan.matchedPlate} — not flagged stolen`}</Muted>
+              ) : lastScan.plate ? (
+                <Muted>No registered vehicle matches that plate.</Muted>
+              ) : null}
             </View>
           ) : null}
 
@@ -378,5 +457,24 @@ const styles = StyleSheet.create({
   result: { alignItems: "center", gap: spacing.sm, marginVertical: spacing.md },
   preview: { width: "100%", height: 160, borderRadius: radius.sm, backgroundColor: colors.slate100 },
   plate: { fontSize: 22, fontWeight: "800", color: colors.navy900, letterSpacing: 1 },
+  alertBanner: {
+    backgroundColor: colors.red500,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
+    gap: 2,
+  },
+  alertBannerText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  alertBannerDismiss: { color: "#fecaca", fontSize: 11 },
+  stolenTag: {
+    backgroundColor: colors.red500,
+    borderRadius: radius.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 6,
+    alignSelf: "flex-start",
+  },
+  stolenTagText: { color: "#fff", fontSize: 12.5, fontWeight: "900", letterSpacing: 0.3 },
   thumb: { width: "100%", height: 140, borderRadius: radius.sm, backgroundColor: colors.slate100, marginTop: spacing.md },
 });

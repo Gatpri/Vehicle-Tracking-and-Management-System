@@ -13,7 +13,7 @@ export interface Vehicle {
   make?: string;
   model?: string;
   year?: number;
-  numberPlate?: string;
+  plateNumber?: string;
   color?: string;
   vin?: string;
   status?: string;
@@ -347,7 +347,7 @@ export const vehicleLabel = (v?: Vehicle | string | null): string => {
   if (!v) return "Vehicle";
   if (typeof v === "string") return "Vehicle";
   const name = [v.make, v.model].filter(Boolean).join(" ");
-  return name || v.numberPlate || "Vehicle";
+  return name || v.plateNumber || "Vehicle";
 };
 
 /**

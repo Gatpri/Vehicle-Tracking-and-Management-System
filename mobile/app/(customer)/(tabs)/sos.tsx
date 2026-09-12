@@ -123,7 +123,7 @@ export default function SosScreen() {
               // ...and an SOS alongside it, so the theft appears on the
               // admins' live alert board rather than only in a report list.
               try {
-                const plate = (vehicles.data ?? []).find((v) => v._id === vehicleId)?.numberPlate;
+                const plate = (vehicles.data ?? []).find((v) => v._id === vehicleId)?.plateNumber;
                 await api.post("/sos", {
                   lat: theftLocation.lat,
                   lng: theftLocation.lng,
