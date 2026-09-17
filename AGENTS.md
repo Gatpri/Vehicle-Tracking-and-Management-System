@@ -3,7 +3,8 @@
 Conventions for AI coding agents working in this repository. Read this before
 making changes; it records decisions that are easy to undo by accident.
 
-For architecture, setup and troubleshooting, see [README.md](README.md).
+For architecture, installation, operations and the application workflows, see
+[README.md](README.md).
 
 ---
 
@@ -41,6 +42,32 @@ Changing any of these will break something that currently works.
 | `getIO().to(rooms).emit(...)` is one call, not a loop | A socket is often in two matching rooms; a per-room loop delivers the message twice |
 | `docker-compose.dev.yml` polls with `find -newer` instead of `node --watch` | Docker Desktop does not propagate inotify events from a Windows host into a Linux container, so `--watch` never fires. `CHOKIDAR_USEPOLLING` does not help — that is read by chokidar, not node's own watcher |
 | The ANPR service serializes inference behind a lock | Ultralytics models are not safe to call concurrently, and the camera poller scans several feeds at once |
+| `postEntry` is the **only** place a balance changes | A transaction row can never exist without its matching balance move, or the reverse. Never adjust `wallet.balance` directly |
+| The two payment shares use subtraction, not two multiplications | `share = amount - commission` always adds back to the exact total; two independent roundings lose paisa |
+| `announceBalance` wraps `getIO()` in try/catch | `getIO()` throws when sockets are not up (a script, a migration, startup). An unguarded emit would abort a settlement *after* the debit was saved, taking money from one wallet and crediting none |
+| Withdrawals move money to `pendingWithdrawal` at **request** time, not approval | Otherwise the same balance could be requested twice, or spent on a booking, while an accounting-admin was still reviewing |
+| A stolen-plate alert goes to the owner for confirmation, never straight to an accusation | Stage-2 recall is ≈0.79 and plate matching is on normalised text, so a single frame is not evidence. Both answers land in the admin SOS queue |
+
+---
+
+## Known limitations — do not "fix" without reading this
+
+Two things are wrong on purpose, because the correct fix is larger than the code.
+
+**Wallet settlement is not atomic.** Every balance change is read-modify-write
+with no transaction, so concurrent requests can double-spend and a crash
+mid-settlement can debit a customer without crediting the garage. This is *not*
+an oversight: MongoDB runs standalone (`mongod --auth`, no `--replSet`), and
+Mongo transactions require a replica set. Fixing it properly means converting to
+a single-node replica set and threading a session through `ledgerService.js` —
+not scattering retries or manual rollbacks through the controllers.
+
+**`track.stable` is plumbed through but never gated on.** `anprService.js`
+surfaces it and nothing consumes it; `cctvController.js` alerts on a stolen match
+plus a cooldown, with no confidence or stability gate. The owner-confirmation
+step is what currently prevents a false accusation. Adding a gate in
+`processFrame` is a genuine improvement — just do not assume its absence is a
+typo.
 
 ---
 
@@ -53,12 +80,29 @@ address itself.
 - **Never hardcode a LAN IP** in source. Three values in `.env`
   (`DOCKER_BACKEND_BASE_URL`, `DOCKER_FRONTEND_URL`, `EXPO_WEB_URL`) name one, and
   `npm run lan` keeps them current.
-- **After changing them**, restart the backend: `docker compose up -d backend`.
-  The container reads env at startup.
-- **`localhost` is wrong in anything emailed.** It resolves to whichever device
-  opens the link.
 - **Check before debugging further:** `npm run lan:check` reports drift and exits
   non-zero if stale.
+- **`localhost` is wrong in anything emailed.** It resolves to whichever device
+  opens the link.
+
+After a wifi or DHCP change, the full sequence is:
+
+```bash
+npm run lan                       # rewrites .env to the current IP
+docker compose up -d backend      # the backend reads env only at startup
+
+cd mobile
+npm run start:lan -- --clear      # Expo inlines env at bundle time
+```
+
+Each step is load-bearing: rewriting `.env` without restarting the backend
+changes nothing, and starting Metro without `--clear` serves a bundle built
+against the old IP.
+
+`sync-lan-ip.mjs` only rewrites the three `DOCKER_*` keys. Bare-metal dev
+(`npm start`) reads `BACKEND_BASE_URL` and `FRONTEND_URL` instead — if you touch
+that script's `TARGETS`, keep the port mapping intact (`:3000` for the backend,
+none for nginx, `:8081` for Expo).
 
 ---
 
@@ -99,7 +143,11 @@ The two clients share a backend and must agree on meaning.
 
 - `roles.ts`, `bookingWorkflow.ts` and `permissions.ts` exist in both
   `vite-project/src/lib/` and `mobile/src/lib/`. **A change to one belongs in the
-  other.** `bookingWorkflow.ts` is byte-for-byte identical.
+  other.** The `BOOKING_STATUS` constants and the transition tables must stay
+  identical across both clients *and* `backend_api/constants/bookingWorkflow.js`
+  — three copies, one meaning. Mobile's copy additionally exports
+  `canCustomerCancel`, which mirrors `CUSTOMER_CANCELLABLE_STATUSES` on the
+  backend; the web app inlines the same check in `BookingsPage.tsx`.
 - Mobile splits four modules by platform (`Map`, `session`, `esewa`, `socket`)
   via `.native.tsx` / `.web.tsx`. Import the bare name — never the suffixed file.
 - Two screens are intentionally *not* literal ports: **CCTV** (the web enumerates
