@@ -112,8 +112,19 @@ function AdminSosPage() {
                 <td><span className={`role-badge status-${a.status}`}>{a.status}</span></td>
                 <td>{new Date(a.createdAt).toLocaleString()}</td>
                 <td>
-                  {a.kind === "theft" && a.ownerConfirmation === "confirmed" && a.vehicle && (
-                    <Link className="add-btn" to="/admin/theft-reports" style={{ marginRight: 8 }}>Track vehicle</Link>
+                  {/* Straight to the feed that saw the vehicle, not the theft
+                      report list: the operator has just confirmed the sighting
+                      and the next useful thing is the live camera. Hidden once
+                      the alert is resolved — there is nothing left to track,
+                      and the row stays in the table as history. */}
+                  {a.kind === "theft" && a.ownerConfirmation === "confirmed" && a.vehicle && a.status !== "resolved" && (
+                    <Link
+                      className="add-btn"
+                      to={a.cameraId ? `/admin/cctv?camera=${encodeURIComponent(a.cameraId)}` : "/admin/cctv"}
+                      style={{ marginRight: 8 }}
+                    >
+                      Track vehicle
+                    </Link>
                   )}
                   {a.status !== "resolved" && (
                     <button className="add-btn" disabled={resolvingId === a._id} onClick={() => resolve(a._id)}>Resolve</button>

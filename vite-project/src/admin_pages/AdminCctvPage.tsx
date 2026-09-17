@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { getSocket } from "../lib/socket";
@@ -58,9 +59,16 @@ interface CameraRecord {
 type Mode = "upload" | "camera";
 
 function AdminCctvPage() {
+  // ?camera=<label> arrives from the SOS queue's "Track vehicle" action: the
+  // operator has just confirmed a theft and wants the feed that saw it, not a
+  // camera list to hunt through. Read once on mount — a later manual tab change
+  // must not be undone by the query string still sitting in the URL.
+  const [searchParams] = useSearchParams();
+  const focusCamera = searchParams.get("camera") ?? "";
+
   const [sightings, setSightings] = useState<Sighting[]>([]);
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState<Mode>("upload");
+  const [mode, setMode] = useState<Mode>(focusCamera ? "camera" : "upload");
   const [file, setFile] = useState<File | null>(null);
   const [cameraId, setCameraId] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -80,6 +88,15 @@ function AdminCctvPage() {
   // The add-camera bar is a single compact row, so the map is opt-in rather
   // than always mounted — otherwise a 260px map would dominate the toolbar.
   const [showMapPicker, setShowMapPicker] = useState(false);
+
+  // Scrolls the deep-linked camera into view once its tile exists. Depends on
+  // remoteCameras because the registry is fetched after mount — on the first
+  // render the tile isn't there to scroll to yet.
+  const focusTileRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!focusCamera) return;
+    focusTileRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusCamera, remoteCameras]);
 
   const load = async () => {
     try {
@@ -404,8 +421,12 @@ function AdminCctvPage() {
           ) : (
             <div className="adm-camera-grid">
               {remoteCameras.map((camera) => (
-                <RemoteCameraTile
+                <div
                   key={camera._id}
+                  ref={camera.label === focusCamera ? focusTileRef : undefined}
+                  className={camera.label === focusCamera ? "adm-camera-focused" : undefined}
+                >
+                <RemoteCameraTile
                   camera={camera}
                   scanning={scanning}
                   onRemove={() => removeRemoteCamera(camera._id)}
@@ -423,6 +444,7 @@ function AdminCctvPage() {
                     )
                   }
                 />
+                </div>
               ))}
               {deviceSlots.map((slot) => (
                 <DeviceCameraTile

@@ -511,6 +511,25 @@ button.adm-live-on:hover { background: #15803d; }
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 18px;
 }
+/* The camera deep-linked from the SOS queue's "Track vehicle" action. The grid
+   can hold a dozen tiles, so arriving on the page without a marker leaves the
+   operator hunting for the one they were sent to. The pulse runs three times
+   and stops rather than looping — it draws the eye on arrival without becoming
+   permanent motion next to a live video feed. */
+.adm-camera-focused {
+  border-radius: 12px;
+  outline: 2px solid #7c5cff;
+  outline-offset: 3px;
+  animation: adm-camera-focus-pulse 1.2s ease-out 3;
+}
+@keyframes adm-camera-focus-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 92, 255, 0); }
+  50%      { box-shadow: 0 0 0 6px rgba(124, 92, 255, 0.28); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .adm-camera-focused { animation: none; }
+}
+
 .adm-camera-tile {
   border: 2px dashed #2a2d45;
   border-radius: 10px;
