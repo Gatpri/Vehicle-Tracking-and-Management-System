@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import "../styles/Signin.css";
+import BrandLogo from "../../components/BrandLogo";
+import GoogleAuthButton from "../../components/GoogleAuthButton";
+import PasswordInput from "../../components/PasswordInput";
 import { Link, useNavigate } from "react-router-dom";
 import axios from 'axios';
 import { toast } from 'react-toastify';
@@ -18,7 +21,6 @@ function Signin(){
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [isSigning, setIsSigning] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
   const navigate = useNavigate();
@@ -116,13 +118,16 @@ function Signin(){
 
         {/*LeftSide*/}
         <div className="left">
-          <h3 className="logo">Practice<span>Project</span></h3>
-          <h1>Launch Product With
+          <BrandLogo tone="light" />
+          <h1 className="auth-tagline">Every Vehicle
             <br/>
-            <span className="gradient">ACME IT</span>
+            <span className="gradient">Verified</span>, Tracked
             <br/>
-            Build Career
+            And Recovered
           </h1>
+          <p className="auth-subtagline">
+            Nationwide plate recognition for Nepal's roads.
+          </p>
         </div>
 
         {/*RightSide*/}
@@ -173,11 +178,8 @@ function Signin(){
 
             <div className="password">
               <label htmlFor="password">Password*
-                <input type={showPassword ? "text" : "password"} id="password" name="mypassword" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8}/>
+                <PasswordInput id="password" name="mypassword" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8}/>
               </label>
-              <span className="toogle" onClick={() => setShowPassword(!showPassword)}>
-                {showPassword ? "🙈" : "👁️"}
-              </span>
             </div>
 
             <p className="below_password">Must be at least 8 characters</p>
@@ -186,11 +188,11 @@ function Signin(){
               <button type="submit" id="button">Create Account</button>
             </div>
 
-            <div className="google_button">
-              <button type="button" id="google_button" onClick={handleGoogleSignIn} disabled={isSigning}>
-                {isSigning ? 'Signing in...' : 'Sign up with Google'}
-              </button>
-            </div>
+            <GoogleAuthButton
+              label="Sign up with Google"
+              busy={isSigning}
+              onClick={handleGoogleSignIn}
+            />
 
             <p className="account_already">
               Already have an account?

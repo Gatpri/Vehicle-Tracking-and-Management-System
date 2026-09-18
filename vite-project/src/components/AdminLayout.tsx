@@ -16,6 +16,7 @@ import {
 } from "../lib/roles";
 import TheftAlertOverlay from "./TheftAlertOverlay";
 import NotificationBell from "./NotificationBell";
+import BrandLogo from "./BrandLogo";
 
 // `roles` mirrors each route's guard in App.tsx, so a link is only ever shown
 // to someone the router would actually let through.
@@ -45,7 +46,7 @@ function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <div className="dashboard">
       <div className="dash-header">
-        <h3 className="logo">8th-Sem<span>-Project</span></h3>
+        <BrandLogo tone="light" />
         <div className="dash-header-right">
           <NotificationBell />
           <span className="welcome">

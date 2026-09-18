@@ -1,0 +1,65 @@
+/* Scoped under .google-auth throughout — the auth sheets style bare `button`
+   and `span`, and those rules must not reach in here. */
+.google-auth {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.google-auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.google-auth .google-auth-rule {
+  flex: 1;
+  height: 1px;
+  background: #d8dce4;
+}
+
+.google-auth .google-auth-or {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a91a0;
+}
+
+.google-auth .google-auth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 12px 18px;
+  background: #fff;
+  border: 1px solid #d8dce4;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #3c4043;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.google-auth .google-auth-btn:hover:not(:disabled) {
+  background: #f7f8fa;
+  border-color: #c3c9d4;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.google-auth .google-auth-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.google-auth .google-auth-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}

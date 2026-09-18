@@ -27,31 +27,12 @@ h2{
     color: blueviolet;
 }
 
-.toogle{
-    cursor: pointer;
-}
-
 .login_button{
-    align-self: center;
+    align-self: stretch;
 }
 
-/* Matches the Google button on the signup page so the two auth screens read
-   as one flow. */
-.google_button{
-    align-self: center !important;
-}
-#google_button {
-    margin-top: 10px;
-    padding: 12px;
-    border: 1px solid #ccc;
-    text-align: center;
-    border-radius: 8px;
-    cursor: pointer;
-}
-#google_button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
+/* Both auth screens now render <GoogleAuthButton/>, which brings its own
+   divider and styling — the old #google_button rules went with it. */
 
 .forget_password{
     text-decoration-line: underline;

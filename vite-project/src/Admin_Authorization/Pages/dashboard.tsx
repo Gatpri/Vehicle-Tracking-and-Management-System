@@ -5,6 +5,7 @@ import { useAuth } from "../../lib/AuthContext";
 import { toast } from "react-toastify";
 import "../styles/dashboard.css";
 import DeliveryStaffTablePage from "../../admin_pages/DeliveryStaffTablePage";
+import PasswordInput from "../../components/PasswordInput";
 
 interface User {
   _id: string;
@@ -176,7 +177,7 @@ function CreateAccountForm({
         <input placeholder="First name" value={firstname} onChange={(e) => setFirstname(e.target.value)} required />
         <input placeholder="Last name" value={lastname} onChange={(e) => setLastname(e.target.value)} required />
         <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required type="email" />
-        <input placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required type="password" minLength={8} />
+        <PasswordInput placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
         {needsArea && (
           <input placeholder="Area (e.g. Bharatpur)" value={area} onChange={(e) => setArea(e.target.value)} required />
         )}
@@ -429,7 +430,7 @@ function Dashboard() {
             <input placeholder="First name" value={newFirstname} onChange={(e) => setNewFirstname(e.target.value)} required />
             <input placeholder="Last name" value={newLastname} onChange={(e) => setNewLastname(e.target.value)} required />
             <input placeholder="Email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} required type="email" />
-            <input placeholder="Password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required type="password" minLength={8} />
+            <PasswordInput placeholder="Password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={8} />
             <button type="submit" className="add-btn">+ Add User</button>
           </form>
         </div>

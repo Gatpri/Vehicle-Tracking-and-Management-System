@@ -1,5 +1,8 @@
 import { useState, type FormEvent } from "react";
 import "../styles/Login.css";
+import BrandLogo from "../../components/BrandLogo";
+import GoogleAuthButton from "../../components/GoogleAuthButton";
+import PasswordInput from "../../components/PasswordInput";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { toast } from 'react-toastify';
@@ -12,7 +15,6 @@ import { useAuth } from "../../lib/AuthContext";
 function Login() {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
-  const [showPassword, setShowPassword] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
   const navigate =useNavigate();
   const { refresh } = useAuth();
@@ -91,17 +93,18 @@ if (result.data.success) {
       <div className="container">
         {/*LeftSide*/}
         <div className="left">
-          <h3 className="logo">
-            Practice<span>Project</span>
-          </h3>
+          <BrandLogo tone="light" />
 
-          <h1>
-            Launch Product With
+          <h1 className="auth-tagline">
+            Every Vehicle
             <br />
-            <span className="gradient">ACME IT</span>
+            <span className="gradient">Verified</span>, Tracked
             <br />
-            Build Career
+            And Recovered
           </h1>
+          <p className="auth-subtagline">
+            Nationwide plate recognition for Nepal's roads.
+          </p>
         </div>
 
         {/*RightSide*/}
@@ -122,19 +125,12 @@ if (result.data.success) {
 
             <div className="password">
               <label htmlFor="passwprd">Password:</label>
-              <input
-                type={showPassword ? "text" : "password"}
+              <PasswordInput
                 id="password"
                 name="myPassword"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              <span
-                className="toogle"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? "🙈" : "👁️"}
-              </span>
             </div>
             <div className="login_button">
               <button type="submit" id="button">
@@ -142,11 +138,11 @@ if (result.data.success) {
               </button>
             </div>
 
-            <div className="google_button">
-              <button type="button" id="google_button" onClick={handleGoogleSignIn} disabled={isSigning}>
-                {isSigning ? "Signing in..." : "Sign in with Google"}
-              </button>
-            </div>
+            <GoogleAuthButton
+              label="Sign in with Google"
+              busy={isSigning}
+              onClick={handleGoogleSignIn}
+            />
 
             <Link to="/recover" className="forget_password">
               Forget Password

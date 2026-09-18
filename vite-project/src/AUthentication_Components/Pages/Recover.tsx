@@ -1,6 +1,7 @@
 
 import { useState, type FormEvent } from "react";
 import "../styles/Recover.css";
+import BrandLogo from "../../components/BrandLogo";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { toast } from 'react-toastify';
@@ -56,13 +57,16 @@ function Recover() {
 
         {/* Left Side */}
         <div className="left">
-          <h3 className="logo">Practice<span>Project</span></h3>
-          <h1>Launch Product With
+          <BrandLogo tone="light" />
+          <h1 className="auth-tagline">Every Vehicle
             <br />
-            <span className="gradient">ACME IT</span>
+            <span className="gradient">Verified</span>, Tracked
             <br />
-            Build Career
+            And Recovered
           </h1>
+          <p className="auth-subtagline">
+            Nationwide plate recognition for Nepal's roads.
+          </p>
         </div>
 
         {/* Right Side */}

@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/AuthContext";
 import { DELIVERY_ADMIN_ROLE } from "../lib/roles";
+import PasswordInput from "../components/PasswordInput";
 
 interface StaffRow {
   _id: string;
@@ -155,8 +156,7 @@ function DeliveryStaffTablePage() {
 
             <label>
               Password
-              <input
-                type="password"
+              <PasswordInput
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 minLength={8}

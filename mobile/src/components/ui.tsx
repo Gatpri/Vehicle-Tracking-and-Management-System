@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -96,17 +97,45 @@ export function Muted({ children }: { children: ReactNode }) {
 }
 
 export function Field({ label, ...props }: { label: string } & TextInputProps) {
+  // Any field asking for a password gets a show/hide control, so the eye
+  // behaves identically everywhere — login, signup, reset, and the admin
+  // screens that create staff accounts. The web app does the same through
+  // components/PasswordInput.tsx.
+  const isPassword = !!props.secureTextEntry;
+  const [revealed, setRevealed] = useState(false);
+
+  // Nothing to reveal while the field is empty, so the eye only appears once
+  // the user starts typing — matching the web behaviour.
+  const showToggle = isPassword && !!props.value;
+
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        placeholderTextColor={colors.slate400}
-        style={styles.input}
-        // Sensible native defaults the web got for free: iOS otherwise
-        // capitalises the first letter of every field, including emails.
-        autoCapitalize={props.autoCapitalize ?? "none"}
-        {...props}
-      />
+      <View style={styles.inputWrap}>
+        <TextInput
+          placeholderTextColor={colors.slate400}
+          // Sensible native defaults the web got for free: iOS otherwise
+          // capitalises the first letter of every field, including emails.
+          autoCapitalize={props.autoCapitalize ?? "none"}
+          {...props}
+          // After the spread, so revealing actually overrides the caller's
+          // secureTextEntry rather than being overwritten by it.
+          secureTextEntry={isPassword && !revealed}
+          style={[styles.input, isPassword && styles.inputWithToggle, props.style]}
+        />
+        {showToggle ? (
+          <Pressable
+            style={styles.inputToggle}
+            onPress={() => setRevealed((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={revealed ? "Hide password" : "Show password"}
+            // The glyph is small; widen the tap target to a comfortable size.
+            hitSlop={10}
+          >
+            <Text style={styles.inputToggleText}>{revealed ? "Hide" : "Show"}</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -238,6 +267,17 @@ const styles = StyleSheet.create({
   mutedSpaced: { color: colors.slate600, marginTop: spacing.md },
   field: { gap: 6 },
   label: { fontSize: 13, fontWeight: "600", color: colors.navy900 },
+  inputWrap: { position: "relative", justifyContent: "center" },
+  /* Room for the Show/Hide control so a long password never runs under it. */
+  inputWithToggle: { paddingRight: 64 },
+  inputToggle: {
+    position: "absolute",
+    right: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+  },
+  inputToggleText: { fontSize: 12.5, fontWeight: "700", color: colors.blue700 },
   input: {
     borderWidth: 1,
     borderColor: colors.slate200,

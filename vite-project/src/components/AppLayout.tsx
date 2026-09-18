@@ -6,6 +6,7 @@ import "./AppLayout.css";
 import { useAuth } from "../lib/AuthContext";
 import TheftAlertOverlay from "./TheftAlertOverlay";
 import NotificationBell from "./NotificationBell";
+import BrandLogo from "./BrandLogo";
 
 const NAV_LINKS = [
   { to: "/vehicles", label: "Vehicles" },
@@ -26,8 +27,7 @@ function AppLayout({ children }: { children: ReactNode }) {
       <header className="al-nav">
         <div className="al-nav-inner">
           <NavLink to="/home" className="al-logo">
-            <span className="al-logo-mark">V</span>
-            VeriTrack
+            <BrandLogo />
           </NavLink>
 
           <nav className="al-links">

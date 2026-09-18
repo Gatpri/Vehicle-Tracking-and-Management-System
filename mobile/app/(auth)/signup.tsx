@@ -12,6 +12,8 @@ import {
 import { Link, useRouter } from "expo-router";
 import api, { getErrorMessage } from "../../src/lib/api";
 import { Button, Field, Heading, Muted } from "../../src/components/ui";
+import { GoogleSignInButton } from "../../src/components/GoogleSignInButton";
+import { useAuth } from "../../src/lib/AuthContext";
 import { colors, radius, shadow, spacing } from "../../src/theme";
 
 /**
@@ -46,6 +48,7 @@ export default function SignupScreen() {
   const [stage, setStage] = useState<Stage>("form");
   const [pendingEmail, setPendingEmail] = useState("");
   const router = useRouter();
+  const { signIn } = useAuth();
 
   // Poll only while waiting. A failed poll is deliberately swallowed: the
   // phone may briefly lose wifi while the user switches to their mail app, and
@@ -220,6 +223,11 @@ export default function SignupScreen() {
           />
 
           <Button title="Create account" onPress={handleSubmit} loading={busy} />
+
+          {/* Same button as the login screen — /google-auth creates the account
+              on first sign-in, so one control serves both. Renders nothing
+              until the OAuth client IDs exist. */}
+          <GoogleSignInButton onToken={signIn} label="Sign up with Google" />
         </View>
 
         <View style={styles.footer}>

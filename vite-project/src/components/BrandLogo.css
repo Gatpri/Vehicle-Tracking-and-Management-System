@@ -1,0 +1,44 @@
+/* Self-contained on purpose: the auth pages style bare `.logo`/`span`
+   selectors, so every rule here is scoped under .brand-logo to stop those
+   sheets from bleeding into the mark. */
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: "Poppins", "Segoe UI", sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.brand-logo .brand-logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #2563eb, #0f172a);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.brand-logo .brand-logo-name { color: #0f172a; }
+
+/* On the dark navy headers the navy wordmark would disappear. */
+.brand-logo-light .brand-logo-name { color: #f4f4f4; }
+.brand-logo-light .brand-logo-mark {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+}
+
+.brand-logo-md { font-size: 18px; }
+
+.brand-logo-lg { font-size: 26px; gap: 12px; }
+.brand-logo-lg .brand-logo-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  font-size: 21px;
+}

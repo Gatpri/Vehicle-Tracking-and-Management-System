@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import axios from "axios";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/reset_password.css";
+import BrandLogo from "../../components/BrandLogo";
+import PasswordInput from "../../components/PasswordInput";
 import { toast } from 'react-toastify';
 
 function ResetPassword() {
@@ -39,13 +41,16 @@ function ResetPassword() {
       <div className="container">
           {/* Left Side */}
         <div className="left">
-          <h3 className="logo">Practice<span>Project</span></h3>
-          <h1>Launch Product With
+          <BrandLogo tone="light" />
+          <h1 className="auth-tagline">Every Vehicle
             <br />
-            <span className="gradient">ACME IT</span>
+            <span className="gradient">Verified</span>, Tracked
             <br />
-            Build Career
+            And Recovered
           </h1>
+          <p className="auth-subtagline">
+            Nationwide plate recognition for Nepal's roads.
+          </p>
         </div>
 
 
@@ -53,15 +58,13 @@ function ResetPassword() {
     <div className="right">
       <h2>Reset Password</h2>
       <form onSubmit={handleReset}>
-        <input
-          type="password"
+        <PasswordInput
           placeholder="New Password"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           required
         />
-        <input
-          type="password"
+        <PasswordInput
           placeholder="Confirm Password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
