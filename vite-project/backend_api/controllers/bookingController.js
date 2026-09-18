@@ -7,12 +7,22 @@ import Delivery from "../models/Delivery.js";
 import { hasPermission, isWorkshopScoped } from "../policies/permissions.js";
 import { getIO } from "../config/socket.js";
 import { moveBookingTo } from "../services/bookingStatusService.js";
+import { notify } from "../services/notificationService.js";
 import {
   BOOKING_STATUS,
   CANCELLABLE_STATUSES,
-  CUSTOMER_CANCELLABLE_STATUSES,
+  customerCancellableStatuses,
   InvalidTransitionError,
 } from "../constants/bookingWorkflow.js";
+
+// Neither side may stop a booking without saying why: the reason is the whole
+// point of the feature, and an empty one just moves the question to a phone
+// call. Trimmed so whitespace can't pass the check, and capped so a pasted
+// essay can't bloat every list response that returns the booking.
+const MIN_REASON_LENGTH = 5;
+const MAX_REASON_LENGTH = 500;
+
+const cleanReason = (raw) => (typeof raw === "string" ? raw.trim() : "");
 
 // A rejected transition is a conflict with the booking's current state, not a
 // server fault — surfaced as 409 with the reason so the UI can explain it.
@@ -362,6 +372,14 @@ export const completeBooking = async (req, res) => {
 
 export const cancelBooking = async (req, res) => {
   try {
+    const reason = cleanReason(req.body?.reason);
+    if (reason.length < MIN_REASON_LENGTH) {
+      return res.status(400).json({
+        success: false,
+        message: "Tell us why you're cancelling — the workshop sees this reason.",
+      });
+    }
+
     const booking = await ServiceRequest.findById(req.params.id);
     if (!booking) return res.status(404).json({ success: false, message: "Booking not found" });
 
@@ -371,10 +389,12 @@ export const cancelBooking = async (req, res) => {
       return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
-    // A customer may only back out before the workshop commits; a manager has
-    // a wider window but still can't cancel once money has moved, because
-    // there's no refund path to undo it.
-    const allowed = isOwner && !managed ? CUSTOMER_CANCELLABLE_STATUSES : CANCELLABLE_STATUSES;
+    // The customer's window runs to the point where backing out starts costing
+    // someone else work — the vehicle in a van, or open on the ramp — and so
+    // depends on which path the booking took (see customerCancellableStatuses).
+    // A manager's window is narrower at the far end instead: they still can't
+    // cancel once money has moved, because there's no refund path to undo it.
+    const allowed = isOwner && !managed ? customerCancellableStatuses(booking) : CANCELLABLE_STATUSES;
     if (!allowed.includes(booking.status)) {
       return res.status(409).json({
         success: false,
@@ -389,12 +409,101 @@ export const cancelBooking = async (req, res) => {
       { $set: { status: "cancelled" } },
     );
 
+    const fromStatus = booking.status;
     booking.status = BOOKING_STATUS.CANCELLED;
     booking.statusChangedAt = new Date();
+    booking.resolution = {
+      kind: "cancelled",
+      reason: reason.slice(0, MAX_REASON_LENGTH),
+      by: req.user._id,
+      byRole: req.user.role,
+      at: new Date(),
+      fromStatus,
+    };
     await booking.save();
+
+    // Whoever did *not* press the button is the one who needs telling. A
+    // customer cancelling has to reach the workshop's queue, and a manager
+    // cancelling has to reach the customer — so this is deliberately not
+    // moveBookingTo's generic emit, which only ever addresses the owner.
     try {
       getIO().to(`user:${booking.user}`).emit("booking:updated", booking);
-    } catch { /* ignore */ }
+      getIO().to("admins").emit("booking:status", {
+        bookingId: booking._id.toString(),
+        status: booking.status,
+        workshop: booking.workshop?.toString?.() ?? booking.workshop,
+      });
+    } catch { /* socket outage must not fail the cancellation */ }
+
+    // The customer already knows why — they typed it. Notifying them about
+    // their own action would just be noise in the bell.
+    if (!isOwner) {
+      await notify({
+        user: booking.user,
+        type: "booking:status",
+        title: "Your booking was cancelled",
+        body: reason,
+        link: "/bookings",
+        meta: { serviceRequestId: booking._id.toString(), status: BOOKING_STATUS.CANCELLED },
+      });
+    }
+
+    res.json({ success: true, booking });
+  } catch (err) {
+    respondToWorkflowError(res, err);
+  }
+};
+
+// The other answer to a pending request: the workshop declines the job and
+// says why. Mirrors acceptBooking — same permission, same single step out of
+// pending — so a request is never left hanging with no reply.
+//
+// Separate from cancelBooking because the two mean different things to
+// everyone reading the history afterwards: a rejection is the workshop's call
+// and reflects on them, a cancellation is the customer's.
+export const rejectBooking = async (req, res) => {
+  try {
+    const reason = cleanReason(req.body?.reason);
+    if (reason.length < MIN_REASON_LENGTH) {
+      return res.status(400).json({
+        success: false,
+        message: "Give the customer a reason for rejecting this booking.",
+      });
+    }
+
+    const booking = await ServiceRequest.findById(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: "Booking not found" });
+    if (!(await canManageBooking(req.user, booking.workshop))) {
+      return res.status(403).json({ success: false, message: "Forbidden" });
+    }
+
+    // Staged before the transition, not after: moveBookingTo emits as soon as
+    // it has saved, and a client that refetches on that event must not be able
+    // to read a rejected booking whose reason has not landed yet. Setting the
+    // field first means the one save carries both.
+    booking.resolution = {
+      kind: "rejected",
+      reason: reason.slice(0, MAX_REASON_LENGTH),
+      by: req.user._id,
+      byRole: req.user.role,
+      at: new Date(),
+      fromStatus: booking.status,
+    };
+    // The transition map allows this only out of pending, so a workshop that
+    // has already accepted gets a 409 here rather than a second way to back
+    // out that skips the cancellation rules above. It throws before anything
+    // is written, so the staged resolution above is discarded with it.
+    await moveBookingTo(booking, BOOKING_STATUS.REJECTED);
+
+    await notify({
+      user: booking.user,
+      type: "booking:status",
+      title: "Your booking was rejected",
+      body: reason,
+      link: "/bookings",
+      meta: { serviceRequestId: booking._id.toString(), status: BOOKING_STATUS.REJECTED },
+    });
+
     res.json({ success: true, booking });
   } catch (err) {
     respondToWorkflowError(res, err);

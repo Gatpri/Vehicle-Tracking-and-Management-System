@@ -6,7 +6,7 @@ import { notify } from "../services/notificationService.js";
 import { checkOverpricing } from "../services/pricingService.js";
 import { getIO } from "../config/socket.js";
 import { moveBookingTo } from "../services/bookingStatusService.js";
-import { BOOKING_STATUS, canTransition } from "../constants/bookingWorkflow.js";
+import { BOOKING_STATUS, canTransition, isStopped } from "../constants/bookingWorkflow.js";
 
 const rupees = (paisa) => `Rs ${(paisa / 100).toFixed(2)}`;
 
@@ -23,8 +23,10 @@ const quotingClosedReason = (booking) => {
   if (booking.paymentStatus === "refunded") {
     return "This booking was refunded — its estimate is closed";
   }
-  if (booking.status === "cancelled") {
-    return "This booking was cancelled";
+  if (isStopped(booking.status)) {
+    return booking.status === BOOKING_STATUS.REJECTED
+      ? "This booking was rejected"
+      : "This booking was cancelled";
   }
   return null;
 };

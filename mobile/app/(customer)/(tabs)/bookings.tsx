@@ -12,6 +12,8 @@ import {
   BOOKING_STATUS,
 } from "../../../src/lib/bookingWorkflow";
 import { PartsQuotePanel } from "../../../src/components/PartsQuotePanel";
+import { ReasonDialog } from "../../../src/components/ReasonDialog";
+import { BookingResolutionNote } from "../../../src/components/BookingResolutionNote";
 import { Screen, Card, Heading, Muted, Button, Badge, Loading, ErrorNote, Empty, Row } from "../../../src/components/ui";
 import { colors, radius, spacing } from "../../../src/theme";
 import { formatMoney, formatDate, vehicleLabel, type Booking, type WalletInfo } from "../../../src/lib/types";
@@ -98,27 +100,24 @@ export default function BookingsScreen() {
     }
   };
 
-  const cancelBooking = (id: string) => {
-    // Destructive and not undoable, so it asks first — the web page had the
-    // same confirm step.
-    Alert.alert("Cancel this booking?", "This cannot be undone.", [
-      { text: "Keep it", style: "cancel" },
-      {
-        text: "Cancel booking",
-        style: "destructive",
-        onPress: async () => {
-          setActingId(id);
-          try {
-            await api.patch(`/bookings/${id}/cancel`);
-            reload();
-          } catch (err) {
-            Alert.alert("Could not cancel", getErrorMessage(err, "Please try again."));
-          } finally {
-            setActingId(null);
-          }
-        },
-      },
-    ]);
+  // Which booking the cancel dialog is open for, if any. The reason itself
+  // lives in the dialog — the backend refuses a cancellation without one, so
+  // there is no path here that skips it.
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  const confirmCancel = async (reason: string) => {
+    const id = cancellingId;
+    if (!id) return;
+    setActingId(id);
+    try {
+      await api.patch(`/bookings/${id}/cancel`, { reason });
+      setCancellingId(null);
+      reload();
+    } catch (err) {
+      Alert.alert("Could not cancel", getErrorMessage(err, "Please try again."));
+    } finally {
+      setActingId(null);
+    }
   };
 
   const filters = [
@@ -176,6 +175,10 @@ export default function BookingsScreen() {
               </Text>
             ) : null}
 
+            {/* Why it stopped, whoever stopped it. Reads as "you cancelled"
+                here and as "the customer cancelled" on the admin board. */}
+            <BookingResolutionNote resolution={b.resolution} viewer="customer" />
+
             {/* Parts estimation, the same negotiation the web app runs. Only
                 shown once the workshop actually has the vehicle open — see
                 canSeePartsEstimate in bookingWorkflow.ts. */}
@@ -204,16 +207,27 @@ export default function BookingsScreen() {
                   }
                 />
               ) : null}
-              {/* Gone once the workshop has started work — at that point parts
-                  may already be off the vehicle, and the backend refuses the
-                  cancel anyway. */}
-              {canCustomerCancel(b.status) ? (
-                <Button title="Cancel" variant="ghost" small onPress={() => cancelBooking(b._id)} disabled={busy} />
+              {/* Gone once backing out would cost someone else work — the
+                  vehicle picked up into a van, or open on the ramp. The exact
+                  cut-off differs per path; canCustomerCancel knows which. */}
+              {canCustomerCancel(b) ? (
+                <Button title="Cancel" variant="ghost" small onPress={() => setCancellingId(b._id)} disabled={busy} />
               ) : null}
             </View>
           </Card>
         );
       })}
+
+      <ReasonDialog
+        visible={cancellingId !== null}
+        title="Cancel this booking?"
+        message="The workshop sees this reason. Cancelling cannot be undone."
+        placeholder="e.g. I've sorted the problem myself"
+        confirmLabel="Cancel booking"
+        busy={actingId !== null && actingId === cancellingId}
+        onCancel={() => setCancellingId(null)}
+        onConfirm={confirmCancel}
+      />
     </Screen>
   );
 }

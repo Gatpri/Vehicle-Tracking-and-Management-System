@@ -58,6 +58,11 @@ const BOOKING_STATUS = {
   // Terminal. Set automatically a minute after the last human step.
   FINISHED: "finished",
   CANCELLED: "cancelled",
+  // The workshop side declining the job, as the counterpart to `accepted`.
+  // Distinct from CANCELLED because "we won't take this" and "the customer
+  // changed their mind" are different outcomes to everyone reading the
+  // history later, and only one of them reflects on the workshop.
+  REJECTED: "rejected",
 };
 
 const BOOKING_STATUSES = Object.values(BOOKING_STATUS);
@@ -67,7 +72,10 @@ const BOOKING_STATUSES = Object.values(BOOKING_STATUS);
 // self-drop-off booking goes straight to servicing — so neither can borrow the
 // other's shortcut.
 const DELIVERY_PATH_TRANSITIONS = {
-  [BOOKING_STATUS.PENDING]: [BOOKING_STATUS.ACCEPTED],
+  // A pending request is answered either way: taken on, or declined with a
+  // reason. Rejection is only ever reachable from pending — once a workshop
+  // has accepted, backing out is a cancellation, not a refusal.
+  [BOOKING_STATUS.PENDING]: [BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.REJECTED],
   [BOOKING_STATUS.ACCEPTED]: [BOOKING_STATUS.DELIVERY_REQUESTED],
   [BOOKING_STATUS.DELIVERY_REQUESTED]: [BOOKING_STATUS.DELIVERY_ASSIGNED],
   [BOOKING_STATUS.DELIVERY_ASSIGNED]: [BOOKING_STATUS.OUT_FOR_DELIVERY],
@@ -100,10 +108,11 @@ const DELIVERY_PATH_TRANSITIONS = {
   [BOOKING_STATUS.DELIVERED]: [BOOKING_STATUS.FINISHED],
   [BOOKING_STATUS.FINISHED]: [],
   [BOOKING_STATUS.CANCELLED]: [],
+  [BOOKING_STATUS.REJECTED]: [],
 };
 
 const SELF_DROPOFF_TRANSITIONS = {
-  [BOOKING_STATUS.PENDING]: [BOOKING_STATUS.ACCEPTED],
+  [BOOKING_STATUS.PENDING]: [BOOKING_STATUS.ACCEPTED, BOOKING_STATUS.REJECTED],
   [BOOKING_STATUS.ACCEPTED]: [BOOKING_STATUS.SERVICING_STARTED],
   [BOOKING_STATUS.SERVICING_STARTED]: [BOOKING_STATUS.ESTIMATION_PENDING],
   [BOOKING_STATUS.ESTIMATION_PENDING]: [BOOKING_STATUS.ESTIMATION_CONFIRMED],
@@ -117,20 +126,70 @@ const SELF_DROPOFF_TRANSITIONS = {
   [BOOKING_STATUS.COMPLETED]: [BOOKING_STATUS.FINISHED],
   [BOOKING_STATUS.FINISHED]: [],
   [BOOKING_STATUS.CANCELLED]: [],
+  [BOOKING_STATUS.REJECTED]: [],
 };
 
-// Statuses a booking can still be cancelled from. Once money has changed hands
-// the booking is settled, so cancelling would need a refund flow that doesn't
-// exist yet — better to refuse than to silently strand a payment.
+// Statuses a booking can still be cancelled from by a manager. Once money has
+// changed hands the booking is settled, so cancelling would need a refund flow
+// that doesn't exist yet — better to refuse than to silently strand a payment.
+//
+// Includes `out-for-delivery` so this is never narrower than the customer's
+// own window below: a customer who can still back out of a job the workshop
+// could not would leave the garage unable to close a booking it is watching
+// the customer abandon.
 const CANCELLABLE_STATUSES = [
   BOOKING_STATUS.PENDING,
   BOOKING_STATUS.ACCEPTED,
   BOOKING_STATUS.DELIVERY_REQUESTED,
   BOOKING_STATUS.DELIVERY_ASSIGNED,
+  BOOKING_STATUS.OUT_FOR_DELIVERY,
 ];
 
-// The customer may only cancel before a workshop has committed to the job.
-const CUSTOMER_CANCELLABLE_STATUSES = [BOOKING_STATUS.PENDING];
+// How long the customer keeps the right to back out, which depends on which
+// path the booking took — the cut-off is the point where their decision starts
+// costing someone else real work:
+//
+//   With delivery — up to and including `out-for-delivery`. Once the vehicle
+//   is `picked-up` it is in a van and no longer theirs to un-book; a driver
+//   already holding the bike would have to turn around and return it.
+//
+//   Self drop-off — up to and including `accepted`. Once the workshop has
+//   `servicing-started` the vehicle is open on the ramp, and parts may already
+//   be off it.
+//
+// A driver merely being *assigned* or *en route* is still cancellable: nobody
+// has handed anything over yet, and cancelBooking stands the delivery leg down
+// for exactly this case.
+const CUSTOMER_CANCELLABLE_DELIVERY_STATUSES = [
+  BOOKING_STATUS.PENDING,
+  BOOKING_STATUS.ACCEPTED,
+  BOOKING_STATUS.DELIVERY_REQUESTED,
+  BOOKING_STATUS.DELIVERY_ASSIGNED,
+  BOOKING_STATUS.OUT_FOR_DELIVERY,
+];
+
+const CUSTOMER_CANCELLABLE_SELF_STATUSES = [
+  BOOKING_STATUS.PENDING,
+  BOOKING_STATUS.ACCEPTED,
+];
+
+// Which of the two applies to this booking. Takes the booking rather than a
+// bare flag so callers can't pass the wrong path by accident.
+const customerCancellableStatuses = (booking) =>
+  booking.deliveryRequested
+    ? CUSTOMER_CANCELLABLE_DELIVERY_STATUSES
+    : CUSTOMER_CANCELLABLE_SELF_STATUSES;
+
+const canCustomerCancel = (booking) =>
+  customerCancellableStatuses(booking).includes(booking.status);
+
+// Stopped before the work was done — cancelled by someone, or rejected by the
+// workshop. Callers that need to refuse further action on a dead booking gate
+// on this rather than on CANCELLED alone, so adding a third way for a booking
+// to end doesn't quietly reopen quoting or delivery for it.
+const STOPPED_STATUSES = [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.REJECTED];
+
+const isStopped = (status) => STOPPED_STATUSES.includes(status);
 
 const transitionsFor = (deliveryRequested) =>
   deliveryRequested ? DELIVERY_PATH_TRANSITIONS : SELF_DROPOFF_TRANSITIONS;
@@ -175,6 +234,7 @@ const BOOKING_STATUS_LABELS = {
   [BOOKING_STATUS.DELIVERED]: "Delivered",
   [BOOKING_STATUS.FINISHED]: "Finished",
   [BOOKING_STATUS.CANCELLED]: "Cancelled",
+  [BOOKING_STATUS.REJECTED]: "Rejected",
 };
 
 // The customer shouldn't be told the job is "Paid" and think it's over while
@@ -197,7 +257,12 @@ export {
   DELIVERY_PATH_TRANSITIONS,
   SELF_DROPOFF_TRANSITIONS,
   CANCELLABLE_STATUSES,
-  CUSTOMER_CANCELLABLE_STATUSES,
+  CUSTOMER_CANCELLABLE_DELIVERY_STATUSES,
+  CUSTOMER_CANCELLABLE_SELF_STATUSES,
+  customerCancellableStatuses,
+  canCustomerCancel,
+  STOPPED_STATUSES,
+  isStopped,
   AUTO_COMPLETE_AFTER_MS,
   transitionsFor,
   canTransition,

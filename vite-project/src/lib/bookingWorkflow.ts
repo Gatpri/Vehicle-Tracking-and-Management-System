@@ -24,6 +24,7 @@ export const BOOKING_STATUS = {
   DELIVERED: "delivered",
   FINISHED: "finished",
   CANCELLED: "cancelled",
+  REJECTED: "rejected",
 } as const;
 
 export type BookingStatus = (typeof BOOKING_STATUS)[keyof typeof BOOKING_STATUS];
@@ -48,6 +49,7 @@ export const BOOKING_STATUS_LABELS: Record<string, string> = {
   [BOOKING_STATUS.DELIVERED]: "Delivered",
   [BOOKING_STATUS.FINISHED]: "Finished",
   [BOOKING_STATUS.CANCELLED]: "Cancelled",
+  [BOOKING_STATUS.REJECTED]: "Rejected",
 };
 
 // The customer shouldn't be told the job is "Paid" and think it's over while
@@ -139,8 +141,43 @@ export const legStatusLabel = (leg: "pickup" | "return", status: string): string
   (leg === "pickup" ? PICKUP_LEG_LABELS : RETURN_LEG_LABELS)[status] ?? status;
 
 export const isCancelled = (status: string) => status === BOOKING_STATUS.CANCELLED;
+export const isRejected = (status: string) => status === BOOKING_STATUS.REJECTED;
+
+// Stopped before the work was done — cancelled by someone, or rejected by the
+// workshop. Mirrors isStopped in backend_api/constants/bookingWorkflow.js.
+export const isStopped = (status: string) =>
+  status === BOOKING_STATUS.CANCELLED || status === BOOKING_STATUS.REJECTED;
+
 export const isFinished = (status: string) =>
-  status === BOOKING_STATUS.FINISHED || status === BOOKING_STATUS.CANCELLED;
+  status === BOOKING_STATUS.FINISHED || isStopped(status);
+
+/**
+ * How long the customer keeps the right to back out. Mirrors
+ * customerCancellableStatuses in backend_api/constants/bookingWorkflow.js,
+ * which is the authority — this only decides whether to show the button.
+ *
+ * The cut-off is the point where backing out starts costing someone else
+ * work: with delivery, the vehicle being `picked-up` into a van; without it,
+ * the workshop having started and possibly already taken parts off the bike.
+ */
+const CUSTOMER_CANCELLABLE_DELIVERY_STATUSES: string[] = [
+  BOOKING_STATUS.PENDING,
+  BOOKING_STATUS.ACCEPTED,
+  BOOKING_STATUS.DELIVERY_REQUESTED,
+  BOOKING_STATUS.DELIVERY_ASSIGNED,
+  BOOKING_STATUS.OUT_FOR_DELIVERY,
+];
+
+const CUSTOMER_CANCELLABLE_SELF_STATUSES: string[] = [
+  BOOKING_STATUS.PENDING,
+  BOOKING_STATUS.ACCEPTED,
+];
+
+export const canCustomerCancel = (booking: { deliveryRequested?: boolean; status: string }) =>
+  (booking.deliveryRequested
+    ? CUSTOMER_CANCELLABLE_DELIVERY_STATUSES
+    : CUSTOMER_CANCELLABLE_SELF_STATUSES
+  ).includes(booking.status);
 
 // Tracking is only meaningful while a delivery leg is actually live: from the
 // moment a staff member is assigned until the vehicle changes hands. It

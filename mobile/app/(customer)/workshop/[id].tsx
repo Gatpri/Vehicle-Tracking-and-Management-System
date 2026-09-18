@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as Location from "expo-location";
+import { LocationPicker } from "../../../src/components/LocationPicker";
 import api, { getErrorMessage } from "../../../src/lib/api";
 import { useApi } from "../../../src/lib/useApi";
 import {
@@ -23,9 +23,11 @@ import { formatMoney, vehicleLabel, type Workshop, type Vehicle } from "../../..
  * booking form.
  *
  * The booking payload is identical to the web version, including the delivery
- * branch. What changes is how a pickup location is chosen: the web opened a
- * Leaflet map picker, while here the device's own GPS fix is used, which is
- * both more accurate and far less work for the user on a phone.
+ * branch, and so is the way a pickup location is chosen: a map you tap, with
+ * "use my location" as one option rather than the only one. This used to take
+ * the device's GPS fix and nothing else, which quietly assumed the customer
+ * was standing next to the vehicle — they are routinely not, and there was no
+ * way to correct it.
  */
 export default function WorkshopDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -75,36 +77,6 @@ export default function WorkshopDetailScreen() {
     const first = vehicles.data?.[0]?._id;
     if (first && !vehicleId) setVehicleId(first);
   }, [vehicles.data, vehicleId]);
-
-  const capturePickup = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Location needed", "Allow location access so staff know where to collect the vehicle.");
-        return;
-      }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      setPickup({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-
-      // Turn the fix into something a human can read, so the customer can tell
-      // at a glance whether the pin is actually where they are.
-      try {
-        const [place] = await Location.reverseGeocodeAsync({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-        });
-        if (place) {
-          setPickupAddress(
-            [place.name, place.street, place.district, place.city].filter(Boolean).join(", ")
-          );
-        }
-      } catch {
-        // Reverse geocoding is a convenience; the coordinates are what matter.
-      }
-    } catch {
-      Alert.alert("Could not get location", "Check that location services are switched on.");
-    }
-  };
 
   const submit = async () => {
     if (!vehicleId) {
@@ -239,17 +211,25 @@ export default function WorkshopDetailScreen() {
 
         {deliveryRequested ? (
           <View style={styles.pickup}>
-            <Button
-              title={pickup ? "Update pickup location" : "Use my current location"}
-              variant="outline"
-              small
-              onPress={capturePickup}
+            <Text style={styles.label}>Pickup location</Text>
+            <Muted>
+              Tap the map where staff should collect the vehicle, or use your current
+              location — then drag the pin to fine-tune.
+            </Muted>
+            {/* The same picker the SOS screen uses. "Current location" is one
+                of its buttons rather than the only way in: the vehicle is
+                often not where the customer is standing when they book — at
+                home while they are at work, or already at a relative's. */}
+            <LocationPicker
+              value={pickup}
+              onChange={setPickup}
+              onAddressResolved={(resolved) => {
+                // Prefill the label only while the customer hasn't typed their
+                // own — theirs always wins. Matches the web page's behaviour.
+                setPickupAddress((current) => (current.trim() ? current : resolved));
+              }}
+              height={260}
             />
-            {pickup ? (
-              <Muted>
-                {pickupAddress || `${pickup.lat.toFixed(5)}, ${pickup.lng.toFixed(5)}`}
-              </Muted>
-            ) : null}
             <Field
               label="Landmark or note (optional)"
               value={pickupAddress}

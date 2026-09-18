@@ -80,6 +80,22 @@ export interface Booking {
   /** Paisa. */
   deliveryFee?: number | null;
   distanceKm?: number | null;
+  /**
+   * Why the booking ended early, present only once it was cancelled or
+   * rejected. `byRole` is what the views key off to phrase it — the customer
+   * reads "you cancelled", the workshop reads "the customer cancelled".
+   */
+  resolution?: BookingResolution | null;
+}
+
+export interface BookingResolution {
+  kind?: "cancelled" | "rejected" | null;
+  reason?: string;
+  by?: UserRecord | string | null;
+  byRole?: string;
+  at?: string | null;
+  /** The status the booking was stopped out of. */
+  fromStatus?: string;
 }
 
 export interface WalletInfo {

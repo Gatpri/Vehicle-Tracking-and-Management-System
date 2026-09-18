@@ -60,6 +60,34 @@ const ServiceRequestSchema = new mongoose.Schema({
   // Great-circle workshop <-> pickupLocation distance backing deliveryFee
   // above. Frozen once computed, same reasoning as deliveryFee itself.
   distanceKm: { type: Number, default: null },
+
+  // Why the booking ended early, and who ended it.
+  //
+  // One sub-document covers both cancellation and rejection rather than two
+  // parallel sets of fields: they carry identical information (who, when, in
+  // what words, out of which status) and differ only in which side acted.
+  // `byRole` is what the three booking views key off to phrase it — the
+  // customer reads "you cancelled", the workshop reads "the customer
+  // cancelled", and both read a rejection the same way.
+  //
+  // `reason` is required by every write path (cancelBooking, rejectBooking):
+  // an unexplained cancellation is exactly the thing the other side then has
+  // to chase someone about, so the server refuses it rather than storing "".
+  resolution: {
+    // Which action closed the booking — the two terminal states that both
+    // otherwise read as "this booking stopped early".
+    kind: { type: String, enum: ["cancelled", "rejected"], default: null },
+    reason: { type: String, default: "" },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    // Snapshotted rather than derived from `by`: roles change, and the
+    // question a reader has months later is which role acted at the time.
+    byRole: { type: String, default: "" },
+    at: { type: Date, default: null },
+    // The status the booking was stopped out of. Without it the record
+    // flattens to "cancelled" and loses whether the customer backed out
+    // before anyone had touched it or after a van was already assigned.
+    fromStatus: { type: String, default: "" },
+  },
 }, { timestamps: true });
 
 const ServiceRequest = mongoose.model("ServiceRequest", ServiceRequestSchema);

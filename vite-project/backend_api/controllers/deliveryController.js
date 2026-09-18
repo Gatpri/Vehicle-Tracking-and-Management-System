@@ -9,7 +9,7 @@ import { notify } from "../services/notificationService.js";
 import { deliveryFeeFor, distanceForDelivery } from "../services/deliveryPricingService.js";
 import { settleDeliveryFee } from "../services/ledgerService.js";
 import { moveBookingTo } from "../services/bookingStatusService.js";
-import { BOOKING_STATUS, InvalidTransitionError, canTransition } from "../constants/bookingWorkflow.js";
+import { BOOKING_STATUS, InvalidTransitionError, canTransition, isStopped } from "../constants/bookingWorkflow.js";
 import { sameRegion, regionQuery } from "../utils/region.js";
 
 const PICKUP_LEG_TRANSITIONS = {
@@ -515,10 +515,10 @@ export const updateDeliveryStatus = async (req, res) => {
     const booking = await ServiceRequest.findById(delivery.booking);
     if (!booking) return res.status(404).json({ success: false, message: "Booking not found" });
 
-    // A cancelled booking stands its legs down — the driver shouldn't be able
-    // to keep advancing a job that no longer exists.
-    if (booking.status === BOOKING_STATUS.CANCELLED) {
-      return res.status(409).json({ success: false, message: "This booking has been cancelled" });
+    // A booking that stopped early stands its legs down — the driver shouldn't
+    // be able to keep advancing a job that no longer exists.
+    if (isStopped(booking.status)) {
+      return res.status(409).json({ success: false, message: "This booking is no longer active" });
     }
 
     // Move the booking first: if this step isn't legal for the booking's

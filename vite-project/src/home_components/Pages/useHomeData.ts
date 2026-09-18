@@ -88,7 +88,8 @@ export function useHomeData(): HomeData {
 
       const vehicles: HomeVehicle[] = vehRes?.data?.vehicles ?? [];
       const bookings: HomeBooking[] = bookRes?.data?.bookings ?? [];
-      // isFinished() is the shared workflow helper (finished | cancelled) —
+      // isFinished() is the shared workflow helper (finished | cancelled |
+      // rejected) —
       // reused rather than re-listing the statuses here, so this cannot drift
       // from the backend definition the rest of the app follows.
       const activeBookings = bookings.filter((b) => !isFinished(b.status));

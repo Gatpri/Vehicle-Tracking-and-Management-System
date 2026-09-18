@@ -29,6 +29,7 @@ export const BOOKING_STATUS = {
   DELIVERED: "delivered",
   FINISHED: "finished",
   CANCELLED: "cancelled",
+  REJECTED: "rejected",
 } as const;
 
 export type BookingStatus = (typeof BOOKING_STATUS)[keyof typeof BOOKING_STATUS];
@@ -53,6 +54,7 @@ export const BOOKING_STATUS_LABELS: Record<string, string> = {
   [BOOKING_STATUS.DELIVERED]: "Delivered",
   [BOOKING_STATUS.FINISHED]: "Finished",
   [BOOKING_STATUS.CANCELLED]: "Cancelled",
+  [BOOKING_STATUS.REJECTED]: "Rejected",
 };
 
 // The customer shouldn't be told the job is "Paid" and think it's over while
@@ -146,20 +148,47 @@ export const legStatusLabel = (leg: "pickup" | "return", status: string): string
 /**
  * Should the customer be offered a Cancel control?
  *
- * Only while the booking is still `pending` — before a workshop has committed
- * to the job at all. This mirrors CUSTOMER_CANCELLABLE_STATUSES in
- * backend_api/constants/bookingWorkflow.js exactly; the server rejects
- * anything later, so a button shown past this point could only ever fail.
+ * Until backing out starts costing someone else work, which depends on which
+ * path the booking took: with delivery, up to `out-for-delivery` (once the
+ * vehicle is `picked-up` it is in a van); without it, up to `accepted` (once
+ * servicing starts the bike is open on the ramp).
  *
- * The web app (BookingsPage.tsx) has always gated on PENDING; mobile was
- * wrongly using `!isFinished`, which offered a Cancel that the backend would
- * refuse for most of the job's life.
+ * Mirrors customerCancellableStatuses in
+ * backend_api/constants/bookingWorkflow.js, which is the authority — this only
+ * decides whether to show the button.
+ *
+ * Takes the booking rather than a bare status: the status alone cannot say
+ * which of the two windows applies.
  */
-export const canCustomerCancel = (status: string) => status === BOOKING_STATUS.PENDING;
+const CUSTOMER_CANCELLABLE_DELIVERY_STATUSES: string[] = [
+  BOOKING_STATUS.PENDING,
+  BOOKING_STATUS.ACCEPTED,
+  BOOKING_STATUS.DELIVERY_REQUESTED,
+  BOOKING_STATUS.DELIVERY_ASSIGNED,
+  BOOKING_STATUS.OUT_FOR_DELIVERY,
+];
+
+const CUSTOMER_CANCELLABLE_SELF_STATUSES: string[] = [
+  BOOKING_STATUS.PENDING,
+  BOOKING_STATUS.ACCEPTED,
+];
+
+export const canCustomerCancel = (booking: { deliveryRequested?: boolean; status: string }) =>
+  (booking.deliveryRequested
+    ? CUSTOMER_CANCELLABLE_DELIVERY_STATUSES
+    : CUSTOMER_CANCELLABLE_SELF_STATUSES
+  ).includes(booking.status);
 
 export const isCancelled = (status: string) => status === BOOKING_STATUS.CANCELLED;
+export const isRejected = (status: string) => status === BOOKING_STATUS.REJECTED;
+
+// Stopped before the work was done — cancelled by someone, or rejected by the
+// workshop. Mirrors isStopped in backend_api/constants/bookingWorkflow.js.
+export const isStopped = (status: string) =>
+  status === BOOKING_STATUS.CANCELLED || status === BOOKING_STATUS.REJECTED;
+
 export const isFinished = (status: string) =>
-  status === BOOKING_STATUS.FINISHED || status === BOOKING_STATUS.CANCELLED;
+  status === BOOKING_STATUS.FINISHED || isStopped(status);
 
 // Tracking is only meaningful while a delivery leg is actually live: from the
 // moment a staff member is assigned until the vehicle changes hands. It

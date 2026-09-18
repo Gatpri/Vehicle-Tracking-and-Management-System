@@ -3,6 +3,8 @@ import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { getSocket } from "../lib/socket";
 import PartsQuotePanel from "../components/PartsQuotePanel";
+import ReasonDialog from "../components/ReasonDialog";
+import BookingResolutionNote, { type BookingResolution } from "../components/BookingResolutionNote";
 import LiveDeliveryMap from "../components/LiveDeliveryMap";
 import DeliveryStaffReviewForm from "../components/DeliveryStaffReviewForm";
 import { redirectToEsewa } from "../lib/esewa";
@@ -12,6 +14,7 @@ import {
   legStatusLabel,
   canTrackDelivery,
   canSeePartsEstimate,
+  canCustomerCancel,
 } from "../lib/bookingWorkflow";
 // Shared so the pickup and RETURN legs agree on where the rider is headed —
 // see lib/deliveryDestination.ts for the bug this replaced.
@@ -111,6 +114,9 @@ interface Booking {
   // main booking is completed+paid — free once requested, since deliveryFee
   // already covers the whole round trip.
   returnDeliveryRequested: boolean;
+  // Present only once the booking was cancelled or rejected — who stopped
+  // it and why.
+  resolution?: BookingResolution | null;
 }
 
 // Mirrors the backend's bookingAmount (walletController.js) — parts/labor
@@ -120,7 +126,10 @@ const bookingAmount = (b: Booking) => (b.finalPrice ?? 0) + (b.deliveryFee ?? 0)
 const statusBadge = (status: Booking["status"]) => {
   switch (status) {
     case "completed": return "uh-badge uh-badge-green";
+    // Both ways a booking stops early read as red — without this, "rejected"
+    // fell through to blue and looked like a step still in progress.
     case "cancelled": return "uh-badge uh-badge-red";
+    case "rejected": return "uh-badge uh-badge-red";
     case "pending": return "uh-badge uh-badge-slate";
     default: return "uh-badge uh-badge-blue";
   }
@@ -190,13 +199,24 @@ function BookingsPage() {
     load(status || undefined);
   };
 
-  const handleCancel = async (id: string) => {
+  // Which booking the cancel dialog is open for, if any. The reason itself
+  // lives in the dialog — the backend refuses a cancellation without one, so
+  // there is no path here that skips it.
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+
+  const handleCancel = async (reason: string) => {
+    if (!cancellingId) return;
+    setCancelBusy(true);
     try {
-      await api.patch(`/bookings/${id}/cancel`);
+      await api.patch(`/bookings/${cancellingId}/cancel`, { reason });
       toast.success("Booking cancelled");
+      setCancellingId(null);
       load(statusFilter || undefined);
     } catch (err) {
       toast.error(getErrorMessage(err, "Failed to cancel booking"));
+    } finally {
+      setCancelBusy(false);
     }
   };
 
@@ -254,9 +274,12 @@ function BookingsPage() {
           <option value="">All statuses</option>
           <option value="pending">Pending</option>
           <option value="accepted">Accepted</option>
-          <option value="in_progress">In Progress</option>
+          <option value={BOOKING_STATUS.SERVICING_STARTED}>Servicing started</option>
+          <option value={BOOKING_STATUS.PAYMENT_PENDING}>Payment pending</option>
           <option value="completed">Completed</option>
+          <option value="finished">Finished</option>
           <option value="cancelled">Cancelled</option>
+          <option value="rejected">Rejected</option>
         </select>
       </div>
 
@@ -291,8 +314,12 @@ function BookingsPage() {
                       {openQuoteId === b._id ? "Hide estimate" : "Parts estimate"}
                     </button>
                   )}
-                  {b.status === BOOKING_STATUS.PENDING && (
-                    <button className="uh-btn uh-btn-sm uh-btn-ghost" onClick={() => handleCancel(b._id)}>Cancel</button>
+                  {/* Gone once backing out would cost someone else work — the
+                      vehicle picked up into a van, or open on the ramp. The
+                      exact cut-off differs per path; canCustomerCancel knows
+                      which, and the backend enforces the same rule. */}
+                  {canCustomerCancel(b) && (
+                    <button className="uh-btn uh-btn-sm uh-btn-ghost" onClick={() => setCancellingId(b._id)}>Cancel</button>
                   )}
                   {/* Step 2: the workshop has accepted, so a delivery booking's
                       customer can now call for the pickup. Self-drop-off
@@ -332,6 +359,10 @@ function BookingsPage() {
                   )}
                 </div>
               </div>
+
+              {/* Why it stopped, if it did. Placed with the row header so it
+                  reads alongside the status badge. */}
+              <BookingResolutionNote resolution={b.resolution} viewer="customer" />
 
               {openDeliveryId === b._id && (
                 <div style={{ margin: "10px 0 18px" }}>
@@ -390,6 +421,17 @@ function BookingsPage() {
           ))}
         </div>
       )}
+
+      <ReasonDialog
+        open={cancellingId !== null}
+        title="Cancel this booking?"
+        message="The workshop sees this reason. Cancelling cannot be undone."
+        placeholder="e.g. I've sorted the problem myself"
+        confirmLabel="Cancel booking"
+        busy={cancelBusy}
+        onCancel={() => setCancellingId(null)}
+        onConfirm={handleCancel}
+      />
     </div>
   );
 }

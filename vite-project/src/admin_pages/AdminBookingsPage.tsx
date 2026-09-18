@@ -3,6 +3,8 @@ import { toast } from "react-toastify";
 import api, { getErrorMessage } from "../lib/api";
 import { getSocket } from "../lib/socket";
 import PartsQuotePanel from "../components/PartsQuotePanel";
+import ReasonDialog from "../components/ReasonDialog";
+import BookingResolutionNote, { type BookingResolution } from "../components/BookingResolutionNote";
 import { BOOKING_STATUS, statusLabel, canSeePartsEstimate } from "../lib/bookingWorkflow";
 import "./AdminPages.css";
 
@@ -17,6 +19,10 @@ interface Booking {
   finalPrice: number | null;
   isOverpriced: boolean;
   paymentStatus: "unpaid" | "paid" | "refunded";
+  // Present only once the booking was cancelled or rejected — who stopped it
+  // and why. A workshop sees the customer's cancellation reason here, and the
+  // rejection reason it sent itself.
+  resolution?: BookingResolution | null;
 }
 
 function AdminBookingsPage() {
@@ -55,6 +61,26 @@ function AdminBookingsPage() {
       socket.off("booking:overpriced", onOverpriced);
     };
   }, []);
+
+  // Which booking the reject dialog is open for. Rejecting needs a reason, so
+  // unlike accept it cannot be a single click — the backend refuses it without
+  // one.
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+
+  const reject = async (reason: string) => {
+    if (!rejectingId) return;
+    setBusyId(rejectingId);
+    try {
+      await api.patch(`/bookings/${rejectingId}/reject`, { reason });
+      toast.success("Booking rejected — the customer has been told why");
+      setRejectingId(null);
+      load();
+    } catch (err) {
+      toast.error(getErrorMessage(err, "Failed to reject booking"));
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const accept = async (id: string) => {
     setBusyId(id);
@@ -132,14 +158,29 @@ function AdminBookingsPage() {
                 <td>{b.vehicle?.plateNumber}</td>
                 <td>{b.workshop?.name}</td>
                 <td>{b.serviceType}</td>
-                <td><span className={`role-badge status-${b.status}`}>{statusLabel(b.status)}</span></td>
+                <td>
+                  <span className={`role-badge status-${b.status}`}>{statusLabel(b.status)}</span>
+                  <BookingResolutionNote resolution={b.resolution} viewer="staff" dark />
+                </td>
                 <td>
                   {b.finalPrice != null ? `Rs ${(b.finalPrice / 100).toFixed(2)}` : "—"}
                   {b.isOverpriced && <div className="adm-overprice-warning">⚠ overpriced</div>}
                 </td>
                 <td>
+                  {/* The two answers to a pending request. Rejecting is only
+                      offered here, matching the backend's transition map —
+                      once accepted, backing out is a cancellation instead. */}
                   {b.status === BOOKING_STATUS.PENDING && (
-                    <button className="add-btn" disabled={busyId === b._id} onClick={() => accept(b._id)}>Accept</button>
+                    <>
+                      <button className="add-btn" disabled={busyId === b._id} onClick={() => accept(b._id)}>Accept</button>
+                      <button
+                        className="adm-reject-btn"
+                        disabled={busyId === b._id}
+                        onClick={() => setRejectingId(b._id)}
+                      >
+                        Reject
+                      </button>
+                    </>
                   )}
                   {/* Step 7: only once the vehicle is actually at the workshop.
                       A delivery booking has to reach "dropped" first; a
@@ -204,6 +245,17 @@ function AdminBookingsPage() {
           </tbody>
         </table>
       )}
+
+      <ReasonDialog
+        open={rejectingId !== null}
+        title="Reject this booking?"
+        message="The customer is told you rejected it, and sees this reason."
+        placeholder="e.g. We don't service this model"
+        confirmLabel="Reject booking"
+        busy={busyId !== null && busyId === rejectingId}
+        onCancel={() => setRejectingId(null)}
+        onConfirm={reject}
+      />
     </div>
   );
 }

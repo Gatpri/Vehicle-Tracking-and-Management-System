@@ -11,6 +11,7 @@ import {
   completeBooking,
   requestPickupDelivery,
   cancelBooking,
+  rejectBooking,
   getVehicleServiceHistory,
   getBookingPayment,
 } from "../controllers/bookingController.js";
@@ -26,6 +27,9 @@ router.get("/bookings", verifyToken, requirePermission("booking:read:any"), list
 router.get("/bookings/:id/payment", verifyToken, getBookingPayment);
 router.get("/bookings/:id", verifyToken, getBooking);
 router.patch("/bookings/:id/accept", verifyToken, requirePermission("booking:manage"), acceptBooking);
+// The other answer to a pending request — declined, with a reason the
+// customer is shown. Same permission as accepting: it is the same decision.
+router.patch("/bookings/:id/reject", verifyToken, requirePermission("booking:manage"), rejectBooking);
 // Step 2 — the customer asks for the pickup leg (delivery bookings only).
 router.patch("/bookings/:id/request-delivery", verifyToken, requestPickupDelivery);
 // Step 7 — workshop starts the service once the vehicle is on site.

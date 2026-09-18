@@ -1,0 +1,48 @@
+/* Why a booking stopped, shown wherever one is listed.
+
+   Two palettes because this appears on both shells: the customer's pages are
+   light, the admin tables are dark (#0e0f19). A single set of colours would be
+   unreadable on one of them, so the dark variant is opt-in via .brn-dark
+   rather than guessed from context. */
+.brn {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--red-500);
+  border-radius: 8px;
+  background: #fef2f2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brn-heading {
+  font-size: 12px;
+  font-weight: 700;
+  color: #b91c1c;
+}
+
+.brn-reason {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--navy-900);
+}
+
+.brn-meta {
+  font-size: 11px;
+  color: var(--slate-400);
+}
+
+/* Admin tables sit on a near-black panel. */
+.brn-dark {
+  background: rgba(239, 68, 68, 0.1);
+}
+.brn-dark .brn-heading {
+  color: #f87171;
+}
+.brn-dark .brn-reason {
+  color: #e2e8f0;
+}
+.brn-dark .brn-meta {
+  color: #94a3b8;
+}
