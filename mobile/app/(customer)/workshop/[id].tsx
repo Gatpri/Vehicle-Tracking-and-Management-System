@@ -15,12 +15,22 @@ import {
   ErrorNote,
   Row,
 } from "../../../src/components/ui";
+import {
+  WorkshopReviewsPanel,
+  type Review,
+} from "../../../src/components/WorkshopReviewsPanel";
 import { colors, radius, spacing } from "../../../src/theme";
 import { formatMoney, vehicleLabel, type Workshop, type Vehicle } from "../../../src/lib/types";
 
+interface ReviewableBooking {
+  _id: string;
+  serviceType: string;
+  workshop: { _id: string; name: string } | null;
+}
+
 /**
- * Ported from the web app's WorkshopDetailPage.tsx — workshop details plus the
- * booking form.
+ * Ported from the web app's WorkshopDetailPage.tsx — workshop details, the
+ * booking form, and the reviews section.
  *
  * The booking payload is identical to the web version, including the delivery
  * branch, and so is the way a pickup location is chosen: a map you tap, with
@@ -48,6 +58,68 @@ export default function WorkshopDetailScreen() {
   const [pickupAddress, setPickupAddress] = useState("");
   const [busy, setBusy] = useState(false);
   const [openingChat, setOpeningChat] = useState(false);
+
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewable, setReviewable] = useState<ReviewableBooking[]>([]);
+  const [reviewBookingId, setReviewBookingId] = useState("");
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState("");
+  const [postingReview, setPostingReview] = useState(false);
+
+  const loadReviews = async () => {
+    try {
+      const res = await api.get(`/workshops/${id}/reviews`);
+      setReviews(res.data.reviews ?? []);
+    } catch {
+      // A failed review fetch shouldn't block the booking form, which is the
+      // screen's primary job — same call as the web page makes.
+    }
+  };
+
+  useEffect(() => {
+    if (!id) return;
+    loadReviews();
+    // Completed bookings at *this* workshop that the user hasn't reviewed —
+    // the only bookings a review can be attached to. The API enforces the same
+    // rule, so the form appearing is a convenience, not the check.
+    api
+      .get("/reviews/pending")
+      .then((res) =>
+        setReviewable(
+          ((res.data.bookings ?? []) as ReviewableBooking[]).filter((b) => b.workshop?._id === id)
+        )
+      )
+      .catch(() => setReviewable([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const submitReview = async () => {
+    if (!reviewBookingId) {
+      Alert.alert("Which service?", "Select the completed service you're reviewing.");
+      return;
+    }
+    setPostingReview(true);
+    try {
+      await api.post("/reviews", {
+        serviceRequestId: reviewBookingId,
+        rating: reviewRating,
+        text: reviewText,
+      });
+      setReviewText("");
+      setReviewBookingId("");
+      setReviewRating(5);
+      setReviewable((prev) => prev.filter((b) => b._id !== reviewBookingId));
+      loadReviews();
+      // The workshop's rating and sentiment aggregates are recomputed server
+      // side on every new review, so re-read them rather than guessing.
+      workshop.reload();
+      Alert.alert("Thanks", "Your review is published.");
+    } catch (err) {
+      Alert.alert("Could not post review", getErrorMessage(err, "Please try again."));
+    } finally {
+      setPostingReview(false);
+    }
+  };
 
   /**
    * Open (or reopen) this customer's thread with this workshop, then jump to
@@ -123,7 +195,15 @@ export default function WorkshopDetailScreen() {
   const w = workshop.data;
 
   return (
-    <Screen refreshing={workshop.refreshing} onRefresh={workshop.refresh}>
+    <Screen
+      refreshing={workshop.refreshing}
+      // Pull-to-refresh pulls the reviews with the workshop — otherwise the
+      // list stays as it was on mount while the rating above it updates.
+      onRefresh={() => {
+        workshop.refresh();
+        loadReviews();
+      }}
+    >
       <View>
         <Heading>{w.name}</Heading>
         <Muted>{w.address || w.area || w.region || "Address not listed"}</Muted>
@@ -242,6 +322,64 @@ export default function WorkshopDetailScreen() {
 
         <Button title="Request booking" onPress={submit} loading={busy} />
       </Card>
+
+      <Card>
+        <Heading level={2}>Reviews</Heading>
+
+        {/* Only shown when this user has a completed, unreviewed service here. */}
+        {reviewable.length > 0 ? (
+          <View style={styles.reviewForm}>
+            <Text style={styles.label}>Which service?</Text>
+            <View style={styles.chips}>
+              {reviewable.map((b) => (
+                <Pressable key={b._id} onPress={() => setReviewBookingId(b._id)}>
+                  <View style={[styles.chip, reviewBookingId === b._id && styles.chipOn]}>
+                    <Text
+                      style={[styles.chipText, reviewBookingId === b._id && styles.chipTextOn]}
+                    >
+                      {b.serviceType}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.label}>Rating</Text>
+            {/* Tappable stars rather than the web's dropdown — a select of
+                repeated ★ glyphs is awkward on a phone, and the whole row is
+                one gesture away either way. */}
+            <View style={styles.stars}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Pressable
+                  key={n}
+                  onPress={() => setReviewRating(n)}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${n} star${n === 1 ? "" : "s"}`}
+                >
+                  <Text style={[styles.star, n <= reviewRating && styles.starOn]}>★</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Field
+              label="Your feedback"
+              value={reviewText}
+              onChangeText={setReviewText}
+              placeholder="Nepali, Romanized Nepali or English — सेवा राम्रो थियो / sewa ramro thiyo"
+              multiline
+              numberOfLines={3}
+              autoCapitalize="sentences"
+            />
+            <Button title="Post review" onPress={submitReview} loading={postingReview} />
+          </View>
+        ) : null}
+
+        {/* The same panel the admin screens use, fed the reviews this screen
+            already holds — it refetches them after a post, so letting the
+            panel fetch its own would mean two copies going out of step. */}
+        <WorkshopReviewsPanel workshopId={id!} reviews={reviews} summary={w} />
+      </Card>
     </Screen>
   );
 }
@@ -284,4 +422,13 @@ const styles = StyleSheet.create({
   },
   switchText: { flex: 1 },
   pickup: { gap: spacing.md, marginTop: spacing.md },
+  reviewForm: {
+    marginTop: spacing.md,
+    paddingBottom: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.slate200,
+  },
+  stars: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.sm },
+  star: { fontSize: 28, color: colors.slate200 },
+  starOn: { color: colors.orange500 },
 });

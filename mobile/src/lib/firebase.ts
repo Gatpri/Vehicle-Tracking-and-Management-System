@@ -1,5 +1,11 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithCredential } from "firebase/auth";
+import {
+  initializeAuth,
+  inMemoryPersistence,
+  getAuth,
+  GoogleAuthProvider,
+  signInWithCredential,
+} from "firebase/auth";
 
 /**
  * Firebase, used only to turn a Google ID token into a *Firebase* ID token.
@@ -28,9 +34,32 @@ const firebaseConfig = {
 export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
 
 // getApps() guards against re-initialising during Fast Refresh, which throws.
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+// Captured before initializeApp, because afterwards it is always non-empty.
+const alreadyInitialised = getApps().length > 0;
+const app = alreadyInitialised ? getApp() : initializeApp(firebaseConfig);
 
-export const auth = getAuth(app);
+/**
+ * In-memory persistence, declared rather than defaulted into.
+ *
+ * On React Native getAuth() warns that the session will not survive an app
+ * restart and points at AsyncStorage. That is the right default for an app
+ * whose session *is* the Firebase one — but not this one: as above, Firebase
+ * only converts a Google token into a Firebase token, and the session the app
+ * actually runs on is the backend JWT in the device keystore. Persisting the
+ * Firebase session would leave a second, longer-lived credential on the device
+ * that nothing reads and logout would not clear.
+ *
+ * So the warning describes exactly what we want. Saying so through
+ * initializeAuth makes that choice explicit — and silences a warning that
+ * would otherwise train everyone to ignore the log.
+ *
+ * Fast Refresh can re-run this module after auth is already initialised, and
+ * initializeAuth throws on a second call; getAuth returns the existing
+ * instance in that case.
+ */
+export const auth = alreadyInitialised
+  ? getAuth(app)
+  : initializeAuth(app, { persistence: inMemoryPersistence });
 
 /**
  * Exchange a Google ID token for a Firebase ID token.

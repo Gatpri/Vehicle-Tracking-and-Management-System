@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
+import MapView, { Marker, Polyline, UrlTile, PROVIDER_DEFAULT } from "react-native-maps";
 import { Modal, Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { colors, radius } from "../theme";
+import { OSM_TILE_URL, OSM_MAX_ZOOM, useOsmTiles, baseMapType } from "./mapTiles";
 import type { MapPoint, MapProps } from "./Map.types";
 
 export type { MapPoint, MapProps } from "./Map.types";
@@ -21,8 +22,9 @@ export type { MapPoint, MapProps } from "./Map.types";
  * just imports "./Map".
  *
  * PROVIDER_DEFAULT is deliberate: it uses Apple Maps on iOS and Google Maps on
- * Android without requiring a Google Maps API key on iOS. Android still needs
- * a key for release builds — see README.md.
+ * Android. Apple Maps needs no key; Google Maps does, and renders a black
+ * square without one, so Android draws OpenStreetMap tiles over the top
+ * instead of requiring one — see mapTiles.ts.
  */
 /**
  * Emoji rather than an icon font or SVG.
@@ -182,7 +184,15 @@ function MapBody({ points, path, route, followCoordinate, style }: MapProps) {
       // where "where am I" is genuinely useful.
       showsUserLocation={!hasOwnPositionMarker}
       showsMyLocationButton={!hasOwnPositionMarker}
+      // See mapTiles.ts: Android suppresses the keyless-black Google base
+      // layer and takes its tiles from OSM instead.
+      mapType={baseMapType}
     >
+      {/* Below the markers and polylines so it never paints over them. */}
+      {useOsmTiles ? (
+        <UrlTile urlTemplate={OSM_TILE_URL} maximumZ={OSM_MAX_ZOOM} shouldReplaceMapContent />
+      ) : null}
+
       {points.map((p, i) => (
         <Marker
           // Stable, positional identity. It deliberately does NOT include the
@@ -300,6 +310,14 @@ export function Map(props: MapProps) {
     <View style={styles.wrap}>
       <MapBody {...props} style={style} />
 
+      {/* OSM's tile policy requires visible attribution, and UrlTile has no
+          prop for it — the web app passes it to Leaflet's TileLayer instead. */}
+      {useOsmTiles ? (
+        <View pointerEvents="none" style={styles.attribution}>
+          <Text style={styles.attributionText}>© OpenStreetMap contributors</Text>
+        </View>
+      ) : null}
+
       {expandable ? (
         <Pressable
           style={styles.expandBtn}
@@ -332,8 +350,16 @@ export function Map(props: MapProps) {
             </Pressable>
           </View>
           {/* Re-rendered rather than moved: a MapView cannot be reparented
-              between the card and the modal, so the modal mounts its own. */}
-          <MapBody {...props} style={styles.fsMap} />
+              between the card and the modal, so the modal mounts its own —
+              and so needs its own attribution. */}
+          <View style={styles.fsMapWrap}>
+            <MapBody {...props} style={styles.fsMap} />
+            {useOsmTiles ? (
+              <View pointerEvents="none" style={styles.attribution}>
+                <Text style={styles.attributionText}>© OpenStreetMap contributors</Text>
+              </View>
+            ) : null}
+          </View>
         </SafeAreaView>
       </Modal>
     </View>
@@ -378,7 +404,17 @@ const styles = StyleSheet.create({
   // borderRadius 0: a rounded corner against a full-bleed screen edge looks
   // like a rendering fault rather than a design choice.
   fsMap: { flex: 1, width: "100%", height: undefined, borderRadius: 0 },
+  fsMapWrap: { flex: 1, position: "relative" },
   empty: { backgroundColor: colors.slate100 },
+  attribution: {
+    position: "absolute",
+    right: 4,
+    bottom: 3,
+    backgroundColor: "rgba(255,255,255,0.72)",
+    paddingHorizontal: 5,
+    borderRadius: 3,
+  },
+  attributionText: { fontSize: 9, color: colors.slate600 },
 
   // Rider's own position, mirroring the web app's marker: a blue arrowhead on
   // a pale halo. The disc carries the rotation so the triangle turns about the

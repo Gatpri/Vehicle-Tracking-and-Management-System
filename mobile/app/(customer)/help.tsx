@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LayoutAnimation, Platform, Pressable, StyleSheet, Text, UIManager, View } from "react-native";
+import { LayoutAnimation, Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Screen, Card, Button } from "../../src/components/ui";
 import HowItWorks from "../../src/components/HowItWorks";
@@ -23,11 +23,11 @@ import { colors, radius, spacing } from "../../src/theme";
  * phone it is a target people miss.
  */
 
-// Android opts out of LayoutAnimation by default. Without this the FAQ
-// accordion snaps open instead of expanding.
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+// The old Android opt-in (UIManager.setLayoutAnimationEnabledExperimental)
+// used to live here, because the legacy architecture disabled LayoutAnimation
+// on Android by default. Under the New Architecture — see newArchEnabled in
+// app.json — it is a no-op that only logs a warning: layout animations are on
+// everywhere, so configureNext below needs no enabling.
 
 interface Faq {
   q: string;

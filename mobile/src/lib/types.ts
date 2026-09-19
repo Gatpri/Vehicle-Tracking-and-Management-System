@@ -38,6 +38,8 @@ export interface WorkshopService {
 export interface Workshop {
   _id: string;
   name: string;
+  /** The blurb customers see on the workshop's detail page. */
+  description?: string;
   address?: string;
   area?: string;
   region?: string;
@@ -54,6 +56,15 @@ export interface Workshop {
   status?: string;
   location?: { lat?: number; lng?: number };
   distanceKm?: number;
+  /**
+   * The assigned manager, populated with the user record for admin and
+   * superadmin (the only roles that may reassign) and a bare id — or null —
+   * for everyone else. Matches the web app's Workshop shape.
+   */
+  managedBy?:
+    | string
+    | { _id: string; firstname: string; lastname: string; email: string; role: string }
+    | null;
 }
 
 export interface Booking {

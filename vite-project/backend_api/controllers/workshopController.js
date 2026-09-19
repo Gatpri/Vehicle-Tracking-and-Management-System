@@ -173,15 +173,45 @@ export const createWorkshop = async (req, res) => {
 
 export const updateWorkshop = async (req, res) => {
   try {
-    // A workshop-admin's edits go through review instead — see
-    // submitWorkshopChangeRequest. The services table prices every booking, so
-    // changing it is a decision for whoever oversees the platform, not the
-    // garage being paid.
+    // What a workshop-admin may write to their own garage without review.
+    //
+    // Only the priced fields need an approver. The services table is what
+    // every booking is billed against, so changing it is a decision for
+    // whoever oversees the platform rather than the garage being paid — that
+    // still goes through submitWorkshopChangeRequest. Brand experience and
+    // bike types cost nothing: they only decide which customer filters the
+    // garage appears in, and a garage that stops servicing KTMs is the only
+    // party who knows. Making them wait on an admin for that was friction
+    // with nothing behind it.
+    const SELF_SERVE_FIELDS = ["brandsSupported", "bikeTypes"];
+
     if (req.user.role === "workshop-admin") {
-      return res.status(403).json({
-        success: false,
-        message: "Submit your changes for approval instead — use the request flow",
-      });
+      const workshop = await Workshop.findById(req.params.id);
+      if (!workshop) return res.status(404).json({ success: false, message: "Workshop not found" });
+      // Same ownership rule the request flow enforces.
+      if (!workshop.managedBy?.equals(req.user._id)) {
+        return res.status(403).json({ success: false, message: "You can only edit your own workshop" });
+      }
+      // Anything outside the self-serve set still needs review, and is
+      // refused here rather than quietly dropped — a silent no-op would look
+      // like a successful save.
+      const requested = Object.keys(req.body);
+      const needsReview = requested.filter((k) => !SELF_SERVE_FIELDS.includes(k));
+      if (needsReview.length > 0) {
+        return res.status(403).json({
+          success: false,
+          message: `Submit ${needsReview.join(", ")} for approval instead — use the request flow`,
+        });
+      }
+
+      if (req.body.brandsSupported !== undefined) {
+        workshop.brandsSupported = parseList(req.body.brandsSupported, VEHICLE_BRANDS);
+      }
+      if (req.body.bikeTypes !== undefined) {
+        workshop.bikeTypes = parseList(req.body.bikeTypes, BIKE_TYPES);
+      }
+      await workshop.save();
+      return res.json({ success: true, workshop });
     }
 
     const allowed = ["name", "description", "location", "address", "area", "region", "servicesOffered", "contactPhone", "contactEmail", "images", "logoUrl", "status"];

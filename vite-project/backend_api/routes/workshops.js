@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyToken, requirePermission, attachUserIfPresent } from "../middleware/auth.js";
+import { verifyToken, requirePermission, requireAnyPermission, attachUserIfPresent } from "../middleware/auth.js";
 import {
   listWorkshops,
   recommendWorkshops,
@@ -45,7 +45,11 @@ router.get("/workshops", attachUserIfPresent, listWorkshops);
 router.get("/workshops/:id/reviews", listWorkshopReviews);
 router.get("/workshops/:id", getWorkshop);
 router.post("/workshops", verifyToken, requirePermission("workshop:create"), createWorkshop);
-router.patch("/workshops/:id", verifyToken, requirePermission("workshop:update"), updateWorkshop);
+// Admins edit anything here; a workshop-admin is let through on
+// workshop:request-update but the controller limits them to the unpriced
+// fields (brands, bike types) on the garage they manage — everything with a
+// price still goes through the change-request flow.
+router.patch("/workshops/:id", verifyToken, requireAnyPermission("workshop:update", "workshop:request-update"), updateWorkshop);
 // A logo is an image, not a price, and it can't be meaningfully diffed in a
 // request — so it stays a direct edit, open to a workshop-admin for their own
 // garage (ownership is enforced inside uploadLogo).

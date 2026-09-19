@@ -225,6 +225,14 @@ export default function WorkshopsScreen() {
                   ) : (
                     <Text style={styles.dim}>Not yet rated</Text>
                   )}
+                  {/* The web list carries the positive share next to the stars —
+                      the average alone hides a garage whose written feedback is
+                      worse than its ratings. */}
+                  {w.sentiment?.scoredCount ? (
+                    <Text style={styles.dim}>
+                      {Math.round((w.sentiment.positiveRatio ?? 0) * 100)}% positive
+                    </Text>
+                  ) : null}
                   {typeof w.distanceKm === "number" ? (
                     <Text style={styles.dim}>{w.distanceKm.toFixed(1)} km away</Text>
                   ) : null}

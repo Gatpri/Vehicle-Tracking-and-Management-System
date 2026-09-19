@@ -110,7 +110,9 @@ export function Field({ label, ...props }: { label: string } & TextInputProps) {
 
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
+      {/* An empty label still reserves a line box, which would push a field
+          sharing a row with a button off that button's baseline. */}
+      {label ? <Text style={styles.label}>{label}</Text> : null}
       <View style={styles.inputWrap}>
         <TextInput
           placeholderTextColor={colors.slate400}

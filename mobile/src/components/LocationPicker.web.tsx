@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import * as Location from "expo-location";
 import { colors, radius, spacing } from "../theme";
+import { PlaceSearch } from "./PlaceSearch";
 import type { LatLng, LocationPickerProps } from "./LocationPicker.types";
 
 /**
@@ -12,8 +13,8 @@ import type { LatLng, LocationPickerProps } from "./LocationPicker.types";
  * uses Leaflet loaded from a CDN at runtime, which keeps it out of the iOS and
  * Android bundles entirely.
  *
- * Same three ways in as the native version: click the map, drag the marker, or
- * use the device position.
+ * Same four ways in as the native version: search a place, click the map, drag
+ * the marker, or use the device position.
  */
 const KATHMANDU: LatLng = { lat: 27.7172, lng: 85.324 };
 
@@ -87,6 +88,13 @@ export function LocationPicker({ value, onChange, onAddressResolved, height = 26
   const setPoint = (point: LatLng) => {
     onChangeRef.current(point);
     resolveAddress(point);
+  };
+
+  /** A search hit already carries a display name, so use it rather than
+   *  spending a reverse-geocode to re-derive a worse one. */
+  const setSearchedPoint = (point: LatLng, label: string) => {
+    onChangeRef.current(point);
+    onAddressRef.current?.(label);
   };
 
   useEffect(() => {
@@ -169,22 +177,33 @@ export function LocationPicker({ value, onChange, onAddressResolved, height = 26
 
   return (
     <View style={styles.wrap}>
-      <View ref={container} style={[styles.mapBox, { height }]} />
-
-      <View style={styles.actions}>
+      {/* Above the map, as on the web app: searching is how you get the map to
+          the right part of the country before any clicking is worth doing. */}
+      <View style={styles.toolbar}>
+        <View style={styles.searchCell}>
+          <PlaceSearch onPick={setSearchedPoint} />
+        </View>
         <Pressable onPress={useMyLocation} style={styles.gpsBtn} disabled={locating}>
           {locating ? (
             <ActivityIndicator size="small" color={colors.navy900} />
           ) : (
-            <Text style={styles.gpsText}>Use my location</Text>
+            <Text style={styles.gpsText}>📍 My location</Text>
           )}
         </Pressable>
-        {value ? <Text style={styles.coords}>{`${value.lat.toFixed(5)}, ${value.lng.toFixed(5)}`}</Text> : null}
       </View>
 
-      <Text style={styles.dragHint}>
-        {value ? "Drag the pin to adjust." : "Click the map to drop a pin."}
-      </Text>
+      <View ref={container} style={[styles.mapBox, { height }]} />
+
+      {value ? (
+        <View style={styles.footer}>
+          <Text style={styles.coords}>{`${value.lat.toFixed(5)}, ${value.lng.toFixed(5)}`}</Text>
+          <Text style={styles.dragHint}>Drag the pin to adjust.</Text>
+        </View>
+      ) : (
+        <Text style={styles.dragHint}>
+          Search, click the map, or use your location — then drag the pin to fine-tune.
+        </Text>
+      )}
     </View>
   );
 }
@@ -192,14 +211,18 @@ export function LocationPicker({ value, onChange, onAddressResolved, height = 26
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
   mapBox: { width: "100%", borderRadius: radius.md, overflow: "hidden", backgroundColor: colors.slate100 },
-  actions: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  // The toolbar has to out-stack the map so the search dropdown draws over it.
+  toolbar: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, zIndex: 20, elevation: 20 },
+  searchCell: { flex: 1 },
   gpsBtn: {
     backgroundColor: colors.slate100,
-    borderRadius: radius.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+    borderRadius: radius.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    justifyContent: "center",
   },
   gpsText: { color: colors.navy900, fontWeight: "600", fontSize: 13 },
-  coords: { color: colors.slate400, fontSize: 12, flexShrink: 1 },
-  dragHint: { color: colors.slate400, fontSize: 12 },
+  footer: { flexDirection: "row", alignItems: "center", gap: spacing.md, flexWrap: "wrap" },
+  coords: { color: colors.slate400, fontSize: 12 },
+  dragHint: { color: colors.slate400, fontSize: 12, flexShrink: 1 },
 });

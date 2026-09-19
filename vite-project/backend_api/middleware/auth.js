@@ -95,3 +95,28 @@ export const requirePermission = (permission) => {
     next();
   };
 };
+
+/**
+ * Passes when the caller holds ANY of these permissions.
+ *
+ * For routes two roles reach by different rights and where the controller
+ * makes the finer decision — PATCH /workshops/:id, where an admin edits
+ * anything (workshop:update) and a workshop-admin may only set the unpriced
+ * fields on their own garage (workshop:request-update). The gate stays closed
+ * to anyone holding neither; it just stops being the only thing deciding.
+ */
+export const requireAnyPermission = (...permissions) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: "Not authenticated" });
+    }
+    const allowed = permissions.some((p) => hasPermission(req.user.role, p, req.user.permissions));
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: missing one of '${permissions.join("', '")}'`,
+      });
+    }
+    next();
+  };
+};

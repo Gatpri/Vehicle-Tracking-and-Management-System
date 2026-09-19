@@ -1,25 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import MapView, { Marker, PROVIDER_DEFAULT } from "react-native-maps";
+import MapView, { Marker, UrlTile, PROVIDER_DEFAULT } from "react-native-maps";
+import { OSM_TILE_URL, OSM_MAX_ZOOM, useOsmTiles, baseMapType } from "./mapTiles";
 import * as Location from "expo-location";
 import { colors, radius, spacing } from "../theme";
+import { PlaceSearch } from "./PlaceSearch";
 import type { LatLng, LocationPickerProps } from "./LocationPicker.types";
 
 /**
  * Pick a point on a map — the native counterpart of the web app's
  * LocationPicker.
  *
- * Three ways in, matching the web version, because none of them covers every
+ * Four ways in, matching the web version, because none of them covers every
  * case on its own:
  *
+ *   Search a place   — you know the address but not where it is on a map.
  *   Tap the map      — the vehicle was taken from somewhere you are not.
  *   Drag the marker  — nudge the pin once it is roughly right.
  *   Use my location  — you are standing where it happened.
  *
- * The first two are what this adds over the old "current location only"
+ * The middle two are what this adds over the old "current location only"
  * button: a stolen vehicle is rarely taken from where the owner is standing
  * when they file the report, which is precisely the case this screen exists
- * for.
+ * for. Search matters for the other caller — an admin registering a workshop
+ * is typically nowhere near the garage they are adding.
  */
 const KATHMANDU: LatLng = { lat: 27.7172, lng: 85.324 };
 
@@ -64,6 +68,13 @@ export function LocationPicker({ value, onChange, onAddressResolved, height = 26
     resolveAddress(point);
   };
 
+  /** A search hit already carries a display name, so use it rather than
+   *  spending a reverse-geocode to re-derive a worse one. */
+  const setSearchedPoint = (point: LatLng, label: string) => {
+    onChange(point);
+    onAddressResolved?.(label);
+  };
+
   const useMyLocation = async () => {
     setLocating(true);
     try {
@@ -82,6 +93,21 @@ export function LocationPicker({ value, onChange, onAddressResolved, height = 26
 
   return (
     <View style={styles.wrap}>
+      {/* Above the map, as on the web: searching is how you get the map to the
+          right part of the country before any tapping is worth doing. */}
+      <View style={styles.toolbar}>
+        <View style={styles.searchCell}>
+          <PlaceSearch onPick={setSearchedPoint} />
+        </View>
+        <Pressable onPress={useMyLocation} style={styles.gpsBtn} disabled={locating}>
+          {locating ? (
+            <ActivityIndicator size="small" color={colors.navy900} />
+          ) : (
+            <Text style={styles.gpsText}>📍 My location</Text>
+          )}
+        </Pressable>
+      </View>
+
       <View style={[styles.mapBox, { height }]}>
         <MapView
           ref={mapRef}
@@ -100,7 +126,14 @@ export function LocationPicker({ value, onChange, onAddressResolved, height = 26
               lng: e.nativeEvent.coordinate.longitude,
             })
           }
+          // See mapTiles.ts: on Android the base layer draws nothing and OSM
+          // tiles are overlaid, because Google Maps needs a key we don't ship.
+          mapType={baseMapType}
         >
+          {useOsmTiles ? (
+            <UrlTile urlTemplate={OSM_TILE_URL} maximumZ={OSM_MAX_ZOOM} shouldReplaceMapContent />
+          ) : null}
+
           {value ? (
             <Marker
               coordinate={{ latitude: value.lat, longitude: value.lng }}
@@ -125,20 +158,26 @@ export function LocationPicker({ value, onChange, onAddressResolved, height = 26
             <Text style={styles.hintText}>Tap the map to drop a pin</Text>
           </View>
         ) : null}
+
+        {/* OSM's tile policy requires visible attribution, which UrlTile has no
+            prop for — the web picker passes it to Leaflet's TileLayer. */}
+        {useOsmTiles ? (
+          <View pointerEvents="none" style={styles.attribution}>
+            <Text style={styles.attributionText}>© OpenStreetMap contributors</Text>
+          </View>
+        ) : null}
       </View>
 
-      <View style={styles.actions}>
-        <Pressable onPress={useMyLocation} style={styles.gpsBtn} disabled={locating}>
-          {locating ? (
-            <ActivityIndicator size="small" color={colors.navy900} />
-          ) : (
-            <Text style={styles.gpsText}>Use my location</Text>
-          )}
-        </Pressable>
-        {value ? <Text style={styles.coords}>{`${value.lat.toFixed(5)}, ${value.lng.toFixed(5)}`}</Text> : null}
-      </View>
-
-      {value ? <Text style={styles.dragHint}>Drag the pin to adjust.</Text> : null}
+      {value ? (
+        <View style={styles.footer}>
+          <Text style={styles.coords}>{`${value.lat.toFixed(5)}, ${value.lng.toFixed(5)}`}</Text>
+          <Text style={styles.dragHint}>Drag the pin to adjust.</Text>
+        </View>
+      ) : (
+        <Text style={styles.dragHint}>
+          Search, tap the map, or use your location — then drag the pin to fine-tune.
+        </Text>
+      )}
     </View>
   );
 }
@@ -156,14 +195,27 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   hintText: { color: "#fff", fontSize: 12, fontWeight: "600" },
-  actions: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  attribution: {
+    position: "absolute",
+    right: 4,
+    bottom: 3,
+    backgroundColor: "rgba(255,255,255,0.72)",
+    paddingHorizontal: 5,
+    borderRadius: 3,
+  },
+  attributionText: { fontSize: 9, color: colors.slate600 },
+  // The toolbar has to out-stack the map so the search dropdown draws over it.
+  toolbar: { flexDirection: "row", alignItems: "flex-start", gap: spacing.sm, zIndex: 20, elevation: 20 },
+  searchCell: { flex: 1 },
   gpsBtn: {
     backgroundColor: colors.slate100,
-    borderRadius: radius.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
+    borderRadius: radius.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    justifyContent: "center",
   },
   gpsText: { color: colors.navy900, fontWeight: "600", fontSize: 13 },
-  coords: { color: colors.slate400, fontSize: 12, flexShrink: 1 },
-  dragHint: { color: colors.slate400, fontSize: 12 },
+  footer: { flexDirection: "row", alignItems: "center", gap: spacing.md, flexWrap: "wrap" },
+  coords: { color: colors.slate400, fontSize: 12 },
+  dragHint: { color: colors.slate400, fontSize: 12, flexShrink: 1 },
 });
